@@ -61,8 +61,9 @@ pub struct CPU {
     //        2's complement result.
     //      - Negative Flag (N): set if the result of the last
     //        operation had bit 7 set to 1 (i.e. the result was
-    //        negative). There is an unused bit between the B
-    //     and V bits, not corresponding to any flag.
+    //        negative). 
+    //     There is an unused bit between the B and V bits, not 
+    //     corresponding to any flag.
     pub program_counter: u16,
     pub accumulator: u8,
     pub status: u8,

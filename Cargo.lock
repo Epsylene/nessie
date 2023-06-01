@@ -3,5 +3,5 @@
 version = 3
 
 [[package]]
-name = "crab_nes"
+name = "nessie"
 version = "0.1.0"
