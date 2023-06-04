@@ -68,6 +68,7 @@ pub struct CPU {
     pub accumulator: u8,
     pub status: u8,
     pub register_x: u8,
+    memory: [u8; 0xFFFF],
 }
 
 impl CPU {
@@ -77,16 +78,87 @@ impl CPU {
             accumulator: 0,
             status: 0,
             register_x: 0,
+            memory: [0; 0xFFFF],
         }
     }
 
-    pub fn interpret(&mut self, program: Vec<u8>) {
-        self.program_counter = 0;
+    /// Read a byte from the CPU's memory
+    fn read(&self, pos: u16) -> u8 {
+        self.memory[pos as usize]
+    }
 
+    /// Write a byte to the CPU's memory
+    fn write(&mut self, pos: u16, data: u8) {
+        self.memory[pos as usize] = data;
+    }
+
+    fn read_u16(&self, pos: u16) -> u16 {
+        // The NES CPU uses little-endian memory addressing, so
+        // we need to split each word in two 8-bit chunks and
+        // read them in the correct order
+        let lo = self.read(pos) as u16;
+        let hi = self.read(pos + 1) as u16;
+
+        (hi << 8) | lo
+    }
+
+    fn write_u16(&mut self, pos: u16, data: u16) {
+        // The NES CPU uses little-endian memory addressing, so
+        // we need to split the 16-bit data into two 8-bit
+        // chunks and write them in the correct order
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8;
+        
+        self.write(pos, lo);
+        self.write(pos + 1, hi);
+    }
+
+    pub fn load(&mut self, program: Vec<u8>) {
+        // The program is loaded into the CPU's memory, starting
+        // at 0x8000 (the beginning of the PRG-ROM space). Then
+        // the adress of the first instruction is written at the
+        // reset vector, 0xFFFC.
+        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
+        self.write_u16(0xFFFC, 0x8000);
+    }
+
+    pub fn reset(&mut self) {
+        // Resetting restores the state of all the registers,
+        // and initializes the program counter with the value
+        // stored at 0xFFFC (which tells the CPU where to start
+        // the execution of the program)
+        self.accumulator = 0;
+        self.register_x = 0;
+        self.status = 0;
+
+        self.program_counter = self.read_u16(0xFFFC);
+    }
+
+    pub fn load_and_run(&mut self, program: Vec<u8>) {
+        // The NES implements what is known as a von Neumann
+        // architecture, where code and data are stored
+        // alongside in the memory. To know where to start
+        // execution of the program, the NES platform uses a
+        // special mechanism, the reset interrupt: upon
+        // inserting a new cartridge, the CPU receives a signal
+        // that instructs it to reset its state and set the
+        // program counter to the adress stored at 0xFFFC.
+        self.load(program);
+        self.reset();
+
+        // The program can then be executed. It is a succession
+        // of bytes, each either referecing an opcode
+        // (instruction) or a parameter for the previous
+        // command. For example, the program [0xa9, 0x05, 0x00]
+        // loads into the acumulator (0xa9) the value 0x05 and
+        // then breaks (0x00).
         loop {
-            let opcode = program[self.program_counter as usize];
+            // To execute the program, we read it byte by byte,
+            // retrieving the opcode...
+            let opcode = self.read(self.program_counter);
             self.program_counter += 1;
 
+            // ...and executing the corresponding instruction
             match opcode {
                 // BRK (Break): forces an interrupt
                 // request
@@ -97,7 +169,7 @@ impl CPU {
                 0xA9 => {
                     // The command parameter is the next byte
                     // after the opcode itself
-                    let param = program[self.program_counter as usize];
+                    let param = self.read(self.program_counter);
                     self.program_counter += 1;
                     
                     self.accumulator = param;
@@ -152,7 +224,7 @@ mod test {
     #[test]
     fn test_0xa9_lda_immediate_load_data() {
         let mut cpu = CPU::new();
-        cpu.interpret(vec![0xa9, 0x05, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
 
         assert_eq!(cpu.accumulator, 0x05);
         assert!(cpu.status & 0b0000_0010 == 0b00);
@@ -162,15 +234,14 @@ mod test {
     #[test]
     fn test_0xa9_lda_zero_flag() {
         let mut cpu = CPU::new();
-        cpu.interpret(vec![0xa9, 0x00, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
         assert!(cpu.status & 0b0000_0010 == 0b10);
     }
 
     #[test]
     fn test_0xaa_tax_move_a_to_x() {
         let mut cpu = CPU::new();
-        cpu.accumulator = 10;
-        cpu.interpret(vec![0xaa, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0x0a, 0xaa, 0x00]);
 
         assert_eq!(cpu.register_x, 10)
     }
@@ -178,7 +249,7 @@ mod test {
     #[test]
     fn test_5_ops_working_together() {
         let mut cpu = CPU::new();
-        cpu.interpret(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
 
         assert_eq!(cpu.register_x, 0xc1)
     }
@@ -186,8 +257,7 @@ mod test {
     #[test]
     fn test_inx_overflow() {
         let mut cpu = CPU::new();
-        cpu.register_x = 0xff;
-        cpu.interpret(vec![0xe8, 0x00]);
+        cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xe8, 0x00]);
 
         assert_eq!(cpu.register_x, 0)
     }
