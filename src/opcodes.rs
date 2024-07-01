@@ -1,63 +1,39 @@
-
+use crate::addressing::AddressingMode;
 use crate::cpu::Cpu;
 
-// The 6502 uses a 16-bit adress bus, meaning that there are
-// 65536 bytes of memory available. However, memory can be
-// adressed in a number of different ways, called "adressing
-// modes", which vary depending on the instruction (with many
-// instructions having several adressing modes):
-//  - Absolute ($c0000): the full memory location, in the range
-//    0x0000 to 0xffff;
-//  - Zero page ($c0): adressing on the first page (the "zero
-//    page"), that is, the first 256 bytes of memory. This is
-//    faster, as only one byte needs to be looked up, and takes
-//    up less space in the assembled code as well;
-//  - Zero page X/Y ($c0, X/Y): a zero page adress is given, and
-//    then the value of the X/Y register is added at the adress.
-//    The Y variant is only used for the LDX and STX commands,
-//    since they can't use Zero Page X adressing;
-//  - Absolute X/Y ($c000, X/Y): same as above, but the X/Y
-//    registers are added to an absolute adress;
-//  - Immediate (#$c0): the adress value is given directly to
-//    the instruction (for example, LDX #$c0 loads the value
-//    0xc0 into the register, not the value stored at the adress
-//    0xc0);
-//  - Implicit: instructions that don't deal with memory
-//    locations are said to have implicit adressing -- the
-//    argument is implied by the instruction;
-//  - Indirect (($c000)): only used by JMP. The byte stored at
-//    the argument adress and the byte after that are used to
-//    form the new adress. For example, if 0x0120 contains the
-//    value 0xfc and 0x0121 contains 0x02, then "JMP ($0120)"
-//    will dereference to "JMP $02fc";
-//  - Indirect X (($c0, X)): also "indexed indirect". Just like
-//    indirect adressing, but the value of the X register is
-//    added to the argument before dereferencing. For example,
-//    "LDA ($c0, X)" with X = 0x04 becomes "LDA ($c4)", where
-//    ($c4) dereferences to the word stored at 0xc4 and 0xc5;
-//  - Indirect Y (($c0), Y): also "indirect indexed". The
-//    argument is dereferenced first, and then the value of the
-//    Y register is added to the new adress.
-pub enum AddressingMode {
-    Absolute,
-    ZeroPage,
-    ZeroPageX,
-    ZeroPageY,
-    AbsoluteX,
-    AbsoluteY,
-    Immediate,
-    Indirect,
-    IndirectX,
-    IndirectY,
-    NoneAdressing,
+use std::collections::HashMap;
+use lazy_static::lazy_static;
+
+// Instructions are executed by the CPU by reading opcodes.
+// Each opcode corresponds to a byte in memory, to which we add
+// a name (for debugging purposes), a number of bytes, a number
+// of execution cycles, and an addressing mode.
+pub struct Opcode {
+    pub code: u8,
+    pub name: &'static str,
+    pub bytes: u16,
+    pub cycles: u8,
+    pub mode: AddressingMode,
+}
+
+impl Opcode {
+    fn new(code: u8, name: &'static str, bytes: u16, cycles: u8, mode: AddressingMode) -> Self {
+        Opcode {
+            code,
+            name,
+            bytes,
+            cycles,
+            mode,
+        }
+    }
 }
 
 impl Cpu {
-    /// Loads a byte of memory into the accumulator
+    /// Load a byte of memory into the accumulator
     pub fn lda(&mut self, mode: &AddressingMode) {
-        // The adress to load from is the operand of the
+        // The address to load from is the operand of the
         // instruction, which is the next byte in memory
-        let addr = self.get_op_adress(mode);
+        let addr = self.get_op_address(mode);
         let value = self.read(addr);
 
         // Then the accumulator is loaded with the value, and
@@ -65,4 +41,48 @@ impl Cpu {
         self.accumulator = value;
         self.zero_negative(self.accumulator);
     }
+
+    /// Copy the accumulator to the X register
+    pub fn tax(&mut self) {
+        self.register_x = self.accumulator;
+        self.zero_negative(self.register_x);
+    }
+
+    /// Increment the X register
+    pub fn inx(&mut self) {
+        self.register_x = self.register_x.wrapping_add(1);
+        self.zero_negative(self.register_x);
+    }
+
+    /// Store the accumulator in memory
+    pub fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        self.write(addr, self.accumulator);
+    }
+}
+
+lazy_static! {
+    pub static ref OPCODES: Vec<Opcode> = vec![
+        Opcode::new(0x00, "BRK", 1, 7, AddressingMode::Implicit),
+        Opcode::new(0xaa, "TAX", 1, 2, AddressingMode::Implicit),
+
+        Opcode::new(0xa9, "LDA", 2, 2, AddressingMode::Immediate),
+        Opcode::new(0xa5, "LDA", 2, 3, AddressingMode::ZeroPage),
+        Opcode::new(0xad, "LDA", 2, 4, AddressingMode::ZeroPageX),
+        Opcode::new(0xb5, "LDA", 3, 4, AddressingMode::Absolute),
+        Opcode::new(0xbd, "LDA", 3, 4, AddressingMode::AbsoluteX),
+        Opcode::new(0xb9, "LDA", 3, 4, AddressingMode::AbsoluteY),
+        Opcode::new(0xa1, "LDA", 2, 6, AddressingMode::IndirectX),
+        Opcode::new(0xb1, "LDA", 2, 5, AddressingMode::IndirectY),
+
+        Opcode::new(0xe8, "INX", 1, 2, AddressingMode::Implicit),
+    ];
+
+    pub static ref OP_MAP: HashMap<u8, &'static Opcode> = {
+        let mut map = HashMap::new();
+        for opcode in OPCODES.iter() {
+            map.insert(opcode.code, opcode);
+        }
+        map
+    };
 }

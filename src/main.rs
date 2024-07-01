@@ -1,4 +1,5 @@
 mod cpu;
+mod addressing;
 mod opcodes;
 
 fn main() {

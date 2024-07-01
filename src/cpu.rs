@@ -1,4 +1,4 @@
-use crate::opcodes::*;
+use crate::opcodes::OP_MAP;
 
 // The CPU (Central Processing Unit) is one of the 4 main
 // components of the NES's hardware, along with the PPU
@@ -7,7 +7,7 @@ use crate::opcodes::*;
 // code, and sends instructions to the PPU and APU to render
 // it. The NES CPU, the 2A03, is a modified version of the 6502
 // chip; it has access to two ressources, the first of which
-// the memory map, a contiguous array of 1-byte cells adressed
+// the memory map, a contiguous array of 1-byte cells addressed
 // with 16-bit pointers and containing:
 //  - [0x0000..0x2000]: 2 KiB of RAM memory;
 //  - [0x2000..0x4020]: IO registers redirecting to the other
@@ -70,6 +70,7 @@ pub struct Cpu {
     pub accumulator: u8,
     pub status: u8,
     pub register_x: u8,
+    pub register_y: u8,
     memory: [u8; 0xFFFF],
 }
 
@@ -80,39 +81,8 @@ impl Cpu {
             accumulator: 0,
             status: 0,
             register_x: 0,
+            register_y: 0,
             memory: [0; 0xFFFF],
-        }
-    }
-
-    /// Get the adress of the operand of the current
-    /// instruction, depending on the adressing mode
-    pub fn get_op_adress(&self, mode: &AddressingMode) -> u16 {
-        match mode {
-            AddressingMode::Absolute => self.read_u16(self.program_counter),
-            
-            AddressingMode::ZeroPage => self.read(self.program_counter) as u16,
-            AddressingMode::ZeroPageX => self.read(self.program_counter).wrapping_add(self.register_x) as u16,
-            AddressingMode::ZeroPageY => self.read(self.program_counter).wrapping_add(self.register_x) as u16,
-            
-            AddressingMode::AbsoluteX => self.read_u16(self.program_counter).wrapping_add(self.register_x as u16),
-            AddressingMode::AbsoluteY => self.read_u16(self.program_counter).wrapping_add(self.register_x as u16),
-            
-            AddressingMode::Immediate => self.program_counter,
-
-            AddressingMode::Indirect => {
-                let ptr = self.read_u16(self.program_counter);
-                self.read_u16(ptr)
-            },
-            AddressingMode::IndirectX => {
-                let ptr = self.read(self.program_counter).wrapping_add(self.register_x);
-                self.read_u16(ptr as u16)
-            }
-            AddressingMode::IndirectY => {
-                let ptr = self.read(self.program_counter);
-                self.read_u16(ptr as u16).wrapping_add(self.register_x as u16)
-            }
-
-            AddressingMode::NoneAdressing => panic!("Invalid adressing mode"),
         }
     }
 
@@ -132,7 +102,7 @@ impl Cpu {
         // we need to split each word in two 8-bit chunks and
         // read them in the correct order
         let lo = self.read(pos) as u16;
-        let hi = self.read(pos + 1) as u16;
+        let hi = self.read(pos.wrapping_add(1)) as u16;
 
         (hi << 8) | lo
     }
@@ -150,10 +120,12 @@ impl Cpu {
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
-        // The program is loaded into the CPU's memory, starting
-        // at 0x8000 (the beginning of the PRG-ROM space). Then
-        // the adress of the first instruction is written at the
-        // reset vector, 0xFFFC.
+        // The program is loaded into the CPU's memory,
+        // starting at 0x8000 (the start of of the PRG-ROM
+        // space). Then this address is written at the reset
+        // vector (0xFFFC), so that the reset interrupt can
+        // then pick it up and start the execution of the
+        // program.
         self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
         self.write_u16(0xFFFC, 0x8000);
     }
@@ -162,7 +134,7 @@ impl Cpu {
         // Resetting restores the state of all the registers,
         // and initializes the program counter with the value
         // stored at 0xFFFC (which tells the CPU where to start
-        // the execution of the program)
+        // the execution of the program).
         self.accumulator = 0;
         self.register_x = 0;
         self.status = 0;
@@ -178,7 +150,7 @@ impl Cpu {
         // special mechanism, the reset interrupt: upon
         // inserting a new cartridge, the CPU receives a signal
         // that instructs it to reset its state and set the
-        // program counter to the adress stored at 0xFFFC.
+        // program counter to the address stored at 0xFFFC.
         self.load(program);
         self.reset();
 
@@ -191,47 +163,29 @@ impl Cpu {
         loop {
             // To execute the program, we read it byte by byte,
             // retrieving the opcode...
-            let opcode = self.read(self.program_counter);
+            let code = self.read(self.program_counter);
+            let opcode = OP_MAP.get(&code).unwrap_or_else(|| panic!("Invalid opcode: 0x{:X}", code));
             self.program_counter += 1;
 
             // ...and executing the corresponding instruction
-            match opcode {
-                // BRK (Break): forces an interrupt
-                // request
+            match code {
+                // BRK (Break): force an interrupt request
                 0x00 => return,
-
-                // LDA (Load Accumulator): loads a byte of
-                // memory into the accumulator.
-                0xA9 => {
-                    self.lda(&AddressingMode::Immediate);
-                    self.program_counter += 1;
+                // LDA (Load Accumulator)
+                0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
+                    self.lda(&opcode.mode)
                 }
-                0xA5 => {
-                    self.lda(&AddressingMode::ZeroPage);
-                    self.program_counter += 1;
-                }
-                0xAD => {
-                    self.lda(&AddressingMode::Absolute);
-                    self.program_counter += 2;
-                }
-
-                // TAX (Transfer Accumulator to X): copies the
-                // current contents of the accumulator into the
-                // X register.
-                0xAA => {
-                    self.register_x = self.accumulator;
-                    self.zero_negative(self.register_x);
-                }
-
-                // INX (Increment X Register): add one to the X
-                // register.
-                0xE8 => {
-                    self.register_x = self.register_x.wrapping_add(1);
-                    self.zero_negative(self.register_x);
-                }
+                // TAX (Transfer Accumulator to X)
+                0xaa => self.tax(),
+                // INX (Increment X Register)
+                0xe8 => self.inx(),
 
                 _ => todo!(),
             }
+
+            // Then we move to the next instruction, which
+            // follows the last byte of the opcode in memory.
+            self.program_counter += opcode.bytes - 1;
         }
     }
 
