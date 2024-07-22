@@ -29,39 +29,14 @@ impl Opcode {
 }
 
 impl Cpu {
-    /// Load a byte of memory into the accumulator
-    pub fn lda(&mut self, mode: &AddressingMode) {
-        // The address to load from is the operand of the
-        // instruction, which is the next byte in memory
-        let addr = self.get_op_address(mode);
-        let value = self.read(addr);
-
-        // Then the accumulator is loaded with the value, and
-        // zero/negative value flags are checked.
+    fn set_accumulator(&mut self, value: u8) {
         self.accumulator = value;
         self.update_zn_flags(self.accumulator);
     }
-
-    /// Copy the accumulator to the X register
-    pub fn tax(&mut self) {
-        self.register_x = self.accumulator;
-        self.update_zn_flags(self.register_x);
-    }
-
-    /// Increment the X register
-    pub fn inx(&mut self) {
-        self.register_x = self.register_x.wrapping_add(1);
-        self.update_zn_flags(self.register_x);
-    }
-
-    /// Store the accumulator in memory
-    pub fn sta(&mut self, mode: &AddressingMode) {
-        let addr = self.get_op_address(mode);
-        self.write(addr, self.accumulator);
-    }
-
-    fn add_with_carry(&mut self, data: u8) -> u8 {
-        // Add value to accumulator, together with the carry bit
+    
+    fn acc_add_with_carry(&mut self, data: u8) {
+        // Add value to accumulator, together with the carry
+        // bit
         let carry = self.status.contains(CpuFlags::CARRY) as u8;
         let result = (data as u16) + (self.accumulator as u16) + (carry as u16);
 
@@ -94,7 +69,39 @@ impl Cpu {
             self.status.remove(CpuFlags::OVERFLOW);
         }
 
-        result
+        // Set the result in the accumulator and update the Z/N
+        // flags.
+        self.set_accumulator(result);
+    }
+
+    /// Load a byte of memory into the accumulator
+    pub fn lda(&mut self, mode: &AddressingMode) {
+        // The address to load from is the operand of the
+        // instruction, which is the next byte in memory
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        // Then the accumulator is loaded with the value, and
+        // zero/negative value flags are checked.
+        self.set_accumulator(value);
+    }
+
+    /// Copy the accumulator to the X register
+    pub fn tax(&mut self) {
+        self.register_x = self.accumulator;
+        self.update_zn_flags(self.register_x);
+    }
+
+    /// Increment the X register
+    pub fn inx(&mut self) {
+        self.register_x = self.register_x.wrapping_add(1);
+        self.update_zn_flags(self.register_x);
+    }
+
+    /// Store the accumulator in memory
+    pub fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        self.write(addr, self.accumulator);
     }
 
     /// Add with carry
@@ -105,12 +112,7 @@ impl Cpu {
 
         // Get the result of adding the value to the
         // accumulator with the carry bit
-        let result = self.add_with_carry(value);
-
-        // Set the result in the accumulator and update the Z/N
-        // flags.
-        self.accumulator = result;
-        self.update_zn_flags(self.accumulator)
+        self.acc_add_with_carry(value);
     }
 
     /// Subtract with carry
@@ -120,22 +122,35 @@ impl Cpu {
         let value = self.read(addr);
 
         // Get the result of subtracting the value from the
-        // accumulator with the carry bit
-        let result = self.add_with_carry((value as i8).wrapping_neg().wrapping_sub(1) as u8);
-
-        // Finally, set the result in the accumulator and
-        // update the Z/N flags. 
-        self.accumulator = result;
-        self.update_zn_flags(self.accumulator)
+        // accumulator with the not of the carry bit. Since SBC
+        // = A - M - (1-C) = A - M - 1 + C = A + (-M-1) + C,
+        // SBC is just ADC with -M-1 instead of M.
+        let value = (value as i8).wrapping_neg().wrapping_sub(1);
+        self.acc_add_with_carry(value as u8);
     } 
 
-    /// Logical AND
+    /// Binary AND
     pub fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         let value = self.read(addr);
 
-        self.accumulator &= value;
-        self.update_zn_flags(self.accumulator);
+        self.set_accumulator(self.accumulator & value);
+    }
+
+    /// Binary XOR
+    pub fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        self.set_accumulator(self.accumulator ^ value);
+    }
+
+    /// Binary OR
+    pub fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        self.set_accumulator(self.accumulator | value);
     }
 }
 
