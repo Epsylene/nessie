@@ -52,30 +52,34 @@ pub struct Cpu {
 bitflags! {
     pub struct CpuFlags: u8 {
         // - Carry Flag (C): set if the last operation caused
-        //    an overflow
+        //  an overflow
         // - Zero Flag (Z): set if the last operation was zero
         // - Interrupt Disable (I): set if the program has
-        //    executed a 'Set Interrupt Disable' (SEI)
-        //    instruction. While set, the processor will not
-        //    respond to interrupts from devices until it is
-        //    cleared by a 'Clear Interrupt Disable' (CLI)
-        //    instruction.
+        //  executed a 'Set Interrupt Disable' (SEI)
+        //  instruction. While set, the processor will not
+        //  respond to interrupts from devices until it is
+        //  cleared by a 'Clear Interrupt Disable' (CLI)
+        //  instruction.
         // - Decimal Mode (D): while set, the processor
-        //    arithmetics will obey Binary Coded Decimal (BCD)
-        //    rules, where each digit is represented by a fixed
-        //    number of bits. This actually allows performing
-        //    decimal arithmetic on numbers, instead of
-        //    hexadecimal (for example, $99 + $01 returns $00
-        //    with a carry, instead of $9A).
+        //  arithmetics will obey Binary Coded Decimal (BCD)
+        //  rules, where each digit is represented by a fixed
+        //  number of bits. This actually allows performing
+        //  decimal arithmetic on numbers, instead of
+        //  hexadecimal (for example, $99 + $01 returns $00
+        //  with a carry, instead of $9A).
         // - Break Command (B): set when a BRK instruction has
-        //    been executed (forcing an interrupt request).
+        //  been executed (forcing an interrupt request).
         // - None: unused bit between the B and V flags.
         // - Overflow Flag (V): set during arithmetic
-        //    operations if the result has yielded an invalid
-        //    2's complement result.
+        //  operations if the result has yielded an invalid 2's
+        //  complement result (for example, in unsigned
+        //  arithmetic 80+80 = 160, but in signed arithmetic
+        //  80+80 = -96, because 160 is too big to fit in a
+        //  byte as a signed number, setting the leftmost bit
+        //  to 1 which interprets it as a negative number).
         // - Negative Flag (N): set if the result of the last
-        //    operation had bit 7 set to 1 (i.e. the result was
-        //    negative).
+        //  operation had bit 7 set to 1 (i.e. the result was
+        //  negative).
         const CARRY = 0b0000_0001;
         const ZERO = 0b0000_0010;
         const INTERRUPT_DISABLE = 0b0000_0100;

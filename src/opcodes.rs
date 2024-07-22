@@ -1,5 +1,5 @@
 use crate::addressing::AddressingMode;
-use crate::cpu::Cpu;
+use crate::cpu::{Cpu, CpuFlags};
 
 use std::collections::HashMap;
 use lazy_static::lazy_static;
@@ -58,6 +58,84 @@ impl Cpu {
     pub fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         self.write(addr, self.accumulator);
+    }
+
+    fn add_with_carry(&mut self, data: u8) -> u8 {
+        // Add value to accumulator, together with the carry bit
+        let carry = self.status.contains(CpuFlags::CARRY) as u8;
+        let result = (data as u16) + (self.accumulator as u16) + (carry as u16);
+
+        // Set the carry flag if the result is larger than 255
+        // (0xff), since that is the largest value for an
+        // unsigned byte.
+        if result > 0xff {
+            self.status.insert(CpuFlags::CARRY);
+        } else {
+            self.status.remove(CpuFlags::CARRY);
+        }
+
+        // Then set the overflow flag. Overflow occurs when the
+        // result of a signed operation does not fit into a
+        // signed byte, which inverts the sign bit and makes
+        // two positive inputs give a negative output or two
+        // negative inputs give a positive output. This may
+        // happen either if the two leftmost bits of the input
+        // are 0 and there is a carry of 1 from the previous
+        // bits, or if the two leftmost bits are 1 and there is
+        // a carry of 0. In other words, there is overflow when
+        // the two input bit 7 are the same and different from
+        // the ouput bit 7: if the sign of both inputs is
+        // different from the sign of the output, an overflow
+        // has occured.
+        let result = result as u8;
+        if (result ^ self.accumulator) & (result ^ data) & 0x80 != 0 {
+            self.status.insert(CpuFlags::OVERFLOW);
+        } else {
+            self.status.remove(CpuFlags::OVERFLOW);
+        }
+
+        result
+    }
+
+    /// Add with carry
+    pub fn adc(&mut self, mode: &AddressingMode) {
+        // Get value to be added
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        // Get the result of adding the value to the
+        // accumulator with the carry bit
+        let result = self.add_with_carry(value);
+
+        // Set the result in the accumulator and update the Z/N
+        // flags.
+        self.accumulator = result;
+        self.update_zn_flags(self.accumulator)
+    }
+
+    /// Subtract with carry
+    pub fn sbc(&mut self, mode: &AddressingMode) {
+        // Get value to be subtracted
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        // Get the result of subtracting the value from the
+        // accumulator with the carry bit
+        let result = self.add_with_carry((value as i8).wrapping_neg().wrapping_sub(1) as u8);
+
+        // Finally, set the result in the accumulator and
+        // update the Z/N flags. 
+        self.accumulator = result;
+        self.update_zn_flags(self.accumulator)
+    } 
+
+    /// Logical AND
+    pub fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        self.accumulator &= value;
+        self.update_zn_flags(self.accumulator);
     }
 }
 
