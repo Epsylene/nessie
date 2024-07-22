@@ -39,19 +39,19 @@ impl Cpu {
         // Then the accumulator is loaded with the value, and
         // zero/negative value flags are checked.
         self.accumulator = value;
-        self.zero_negative(self.accumulator);
+        self.update_zn_flags(self.accumulator);
     }
 
     /// Copy the accumulator to the X register
     pub fn tax(&mut self) {
         self.register_x = self.accumulator;
-        self.zero_negative(self.register_x);
+        self.update_zn_flags(self.register_x);
     }
 
     /// Increment the X register
     pub fn inx(&mut self) {
         self.register_x = self.register_x.wrapping_add(1);
-        self.zero_negative(self.register_x);
+        self.update_zn_flags(self.register_x);
     }
 
     /// Store the accumulator in memory

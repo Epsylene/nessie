@@ -1,3 +1,4 @@
+use bitflags::bitflags;
 use crate::opcodes::OP_MAP;
 
 // The CPU (Central Processing Unit) is one of the 4 main
@@ -33,45 +34,57 @@ pub struct Cpu {
     //     memory.
     //  3) Accumulator (A): stores the results of arithmetic,
     //     logic, and memory access operations.
-    //  4) Index Register X/Y (X/Y): general purpose registers,
+    //  4-5) Index Register X/Y (X/Y): general purpose registers,
     //     commonly used to hold counters or offset for
     //     accessing memory.
-    //  5) Processor Status (P): holds the current status of
+    //  6) Processor Status (P): holds the current status of
     //     operations; each bit represents one of 7 flags that
     //     are set or cleared depending on the result of the
-    //     last executed instruction. The flags are, from most
-    //     to least significant bit:
-    //      - Carry Flag (C): set if the last operation caused
-    //          an overflow
-    //      - Zero Flag (Z): set if the last operation was zero
-    //      - Interrupt Disable (I): set if the program has
-    //        executed a 'Set Interrupt Disable' (SEI)
-    //        instruction. While set, the processor will not
-    //        respond to interrupts from devices until it is
-    //        cleared by a 'Clear Interrupt Disable' (CLI)
-    //        instruction.
-    //      - Decimal Mode (D): while set, the processor
-    //        arithmetics will obey Binary Coded Decimal (BCD)
-    //        rules, where each digit is represented by a fixed
-    //        number of bits. This actually allows performing
-    //        decimal arithmetic on numbers, instead of
-    //        hexadecimal (for example, $99 + $01 returns $00
-    //        with a carry, instead of $9A).
-    //      - Break Command (B): set when a BRK instruction has
-    //        been executed (forcing an interrupt request).
-    //      - Overflow Flag (V): set during arithmetic
-    //        operations if the result has yielded an invalid
-    //        2's complement result.
-    //      - Negative Flag (N): set if the result of the last
-    //        operation had bit 7 set to 1 (i.e. the result was
-    //        negative). There is an unused bit between the B
-    //        and V bits, not corresponding to any flag.
+    //     last executed instruction.
     pub program_counter: u16,
     pub accumulator: u8,
-    pub status: u8,
+    pub status: CpuFlags,
     pub register_x: u8,
     pub register_y: u8,
     memory: [u8; 0xFFFF],
+}
+
+bitflags! {
+    pub struct CpuFlags: u8 {
+        // - Carry Flag (C): set if the last operation caused
+        //    an overflow
+        // - Zero Flag (Z): set if the last operation was zero
+        // - Interrupt Disable (I): set if the program has
+        //    executed a 'Set Interrupt Disable' (SEI)
+        //    instruction. While set, the processor will not
+        //    respond to interrupts from devices until it is
+        //    cleared by a 'Clear Interrupt Disable' (CLI)
+        //    instruction.
+        // - Decimal Mode (D): while set, the processor
+        //    arithmetics will obey Binary Coded Decimal (BCD)
+        //    rules, where each digit is represented by a fixed
+        //    number of bits. This actually allows performing
+        //    decimal arithmetic on numbers, instead of
+        //    hexadecimal (for example, $99 + $01 returns $00
+        //    with a carry, instead of $9A).
+        // - Break Command (B): set when a BRK instruction has
+        //    been executed (forcing an interrupt request).
+        // - None: unused bit between the B and V flags.
+        // - Overflow Flag (V): set during arithmetic
+        //    operations if the result has yielded an invalid
+        //    2's complement result.
+        // - Negative Flag (N): set if the result of the last
+        //    operation had bit 7 set to 1 (i.e. the result was
+        //    negative).
+        const CARRY = 0b0000_0001;
+        const ZERO = 0b0000_0010;
+        const INTERRUPT_DISABLE = 0b0000_0100;
+        const DECIMAL_MODE = 0b0000_1000;
+        const BREAK = 0b0001_0000;
+        const NONE = 0b0010_0000;
+        const OVERFLOW = 0b0100_0000;
+        const NEGATIVE = 0b1000_0000;
+    }
 }
 
 impl Cpu {
@@ -79,7 +92,7 @@ impl Cpu {
         Self {
             program_counter: 0,
             accumulator: 0,
-            status: 0,
+            status: CpuFlags::NONE | CpuFlags::INTERRUPT_DISABLE,
             register_x: 0,
             register_y: 0,
             memory: [0; 0xFFFF],
@@ -127,19 +140,20 @@ impl Cpu {
         // then pick it up and start the execution of the
         // program.
         self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.write_u16(0xFFFC, 0x8000);
+        self.write_u16(0xfffc, 0x8000);
     }
 
     pub fn reset(&mut self) {
         // Resetting restores the state of all the registers,
         // and initializes the program counter with the value
         // stored at 0xFFFC (which tells the CPU where to start
-        // the execution of the program).
+        // the execution of the program) and the status flags
+        // INT and None.
         self.accumulator = 0;
         self.register_x = 0;
-        self.status = 0;
+        self.status = CpuFlags::NONE | CpuFlags::INTERRUPT_DISABLE;
 
-        self.program_counter = self.read_u16(0xFFFC);
+        self.program_counter = self.read_u16(0xfffc);
     }
 
     pub fn load_and_run(&mut self, program: Vec<u8>) {
@@ -191,21 +205,21 @@ impl Cpu {
 
     /// Update the zero and negative flags of the status
     /// register depending on the contents of the given register
-    pub fn zero_negative(&mut self, register: u8) {
+    pub fn update_zn_flags(&mut self, register: u8) {
         // If the register is 0, set the zero flag, otherwise
         // clear it
         if register == 0 {
-            self.status |= 0b0000_0010;
+            self.status.insert(CpuFlags::ZERO);
         } else {
-            self.status &= 0b1111_1101;
+            self.status.remove(CpuFlags::ZERO);
         }
 
         // Set the negative flag if the negative bit of the
         // register is set
         if register & 0b1000_0000 != 0 {
-            self.status |= 0b1000_0000;
+            self.status.insert(CpuFlags::NEGATIVE);
         } else {
-            self.status &= 0b0111_1111;
+            self.status.remove(CpuFlags::NEGATIVE);
         }
     }
 }
