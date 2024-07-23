@@ -86,7 +86,7 @@ bitflags! {
         const INTERRUPT_DISABLE = 0b0000_0100;
         const DECIMAL_MODE = 0b0000_1000;
         const BREAK = 0b0001_0000;
-        const NONE = 0b0010_0000;
+        const UNUSED = 0b0010_0000;
         const OVERFLOW = 0b0100_0000;
         const NEGATIVE = 0b1000_0000;
     }
@@ -122,7 +122,7 @@ impl Cpu {
             stack_pointer: Cpu::STACK_RESET,
             register_x: 0,
             register_y: 0,
-            status: CpuFlags::NONE | CpuFlags::INTERRUPT_DISABLE,
+            status: CpuFlags::UNUSED | CpuFlags::INTERRUPT_DISABLE,
             memory: [0; 0xFFFF],
         }
     }
@@ -224,7 +224,7 @@ impl Cpu {
         self.register_x = 0;
         self.register_y = 0;
         self.stack_pointer = Cpu::STACK_RESET;
-        self.status = CpuFlags::NONE | CpuFlags::INTERRUPT_DISABLE;
+        self.status = CpuFlags::UNUSED | CpuFlags::INTERRUPT_DISABLE;
 
         self.program_counter = self.read_u16(0xfffc);
     }
@@ -321,13 +321,31 @@ impl Cpu {
                     self.cmp(mode)
                 }
                 // CPX (Compare X Register)
-                0xe0 | 0xe4 | 0xec => {
-                    self.cpx(mode)
-                }
+                0xe0 | 0xe4 | 0xec => self.cpx(mode),
                 // CPY (Compare Y Register)
-                0xc0 | 0xc4 | 0xcc => {
-                    self.cpy(mode)
-                }
+                0xc0 | 0xc4 | 0xcc => self.cpy(mode),
+                // JMP (Jump)
+                0x4c | 0x6c => self.jmp(mode),
+                // JSR (Jump to Subroutine)
+                0x20 => self.jsr(),
+                // RTS (Return from Subroutine)
+                0x60 => self.rts(),
+                // BCC (Branch if Carry Clear)
+                0x90 => self.bcc(),
+                // BCS (Branch if Carry Set)
+                0xb0 => self.bcs(),
+                // BEQ (Branch if Equal)
+                0xf0 => self.beq(),
+                // BMI (Branch if Minus)
+                0x30 => self.bmi(),
+                // BNE (Branch if Not Equal)
+                0xd0 => self.bne(),
+                // BPL (Branch if Positive)
+                0x10 => self.bpl(),
+                // BVC (Branch if Overflow Clear)
+                0x50 => self.bvc(),
+                // BVS (Branch if Overflow Set)
+                0x70 => self.bvs(),
                 _ => todo!(),
             }
 

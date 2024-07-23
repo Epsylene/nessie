@@ -4,8 +4,8 @@ use crate::cpu::{Cpu, CpuFlags};
 use std::collections::HashMap;
 use lazy_static::lazy_static;
 
-// Instructions are executed by the CPU by reading Opcodes.
-// Each Opcode corresponds to a byte in memory, to which we add
+// Instructions are executed by the CPU by reading opcodes.
+// Each opcode corresponds to a byte in memory, to which we add
 // a name (for debugging purposes), a number of bytes, a number
 // of execution cycles, and an addressing mode.
 pub struct Opcode {
@@ -87,7 +87,7 @@ impl Cpu {
         // The address to load from is the operand of the
         // instruction, which is the next byte in memory
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         // Then the accumulator is loaded with the value, and
         // zero/negative value flags are checked.
@@ -103,14 +103,14 @@ impl Cpu {
     /// Store the accumulator in memory
     pub fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        self.write(addr, self.accumulator);
+        self.write_u8(addr, self.accumulator);
     }
 
     /// Add value to accumulator with carry
     pub fn adc(&mut self, mode: &AddressingMode) {
         // Get value to be added
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         // Get the result of adding the value to the
         // accumulator with the carry bit
@@ -121,7 +121,7 @@ impl Cpu {
     pub fn sbc(&mut self, mode: &AddressingMode) {
         // Get value to be subtracted
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         // Get the result of subtracting the value from the
         // accumulator with the not of the carry bit. Since SBC
@@ -134,7 +134,7 @@ impl Cpu {
     /// Bit AND between accumulator and value
     pub fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         self.set_accumulator(self.accumulator & value);
     }
@@ -142,7 +142,7 @@ impl Cpu {
     /// Bit XOR between accumulator and value
     pub fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         self.set_accumulator(self.accumulator ^ value);
     }
@@ -150,7 +150,7 @@ impl Cpu {
     /// Bit OR between accumulator and value 
     pub fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         self.set_accumulator(self.accumulator | value);
     }
@@ -158,7 +158,7 @@ impl Cpu {
     /// Shift value by 1 bit to the left
     pub fn asl(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let mut value = self.read(addr);
+        let mut value = self.read_u8(addr);
 
         // Set the carry flag if the leftmost bit is 1
         if value >> 7 == 1 {
@@ -170,14 +170,14 @@ impl Cpu {
         // Shift the value left by one, and set the zero and
         // negative flags
         value <<= 1;
-        self.write(addr, value);
+        self.write_u8(addr, value);
         self.update_zn_flags(value);
     }
 
     /// Shift value by 1 bit to the right
     pub fn lsr(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let mut value = self.read(addr);
+        let mut value = self.read_u8(addr);
 
         // Set the carry flag if the rightmost bit is 1
         if value & 1 == 1 {
@@ -189,14 +189,14 @@ impl Cpu {
         // Shift the value right by one, and set the zero and
         // negative flags
         value >>= 1;
-        self.write(addr, value);
+        self.write_u8(addr, value);
         self.update_zn_flags(value);
     }
 
     /// Rotate value by 1 bit to the left
     pub fn rol(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let mut value = self.read(addr);
+        let mut value = self.read_u8(addr);
 
         // Set the carry flag if the leftmost bit is 1
         let carry = self.status.contains(CpuFlags::CARRY) as u8;
@@ -211,14 +211,14 @@ impl Cpu {
         value <<= 1;
         value |= carry;
 
-        self.write(addr, value);
+        self.write_u8(addr, value);
         self.update_zn_flags(value);
     }
 
     /// Rotate value by 1 bit to the right
     pub fn ror(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let mut value = self.read(addr);
+        let mut value = self.read_u8(addr);
 
         // Set the carry flag if the rightmost bit is 1
         let carry = self.status.contains(CpuFlags::CARRY) as u8;
@@ -233,16 +233,16 @@ impl Cpu {
         value >>= 1;
         value |= carry << 7;
 
-        self.write(addr, value);
+        self.write_u8(addr, value);
         self.update_zn_flags(value);
     }
 
     /// Increment value by 1
     pub fn inc(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr).wrapping_add(1);
+        let value = self.read_u8(addr).wrapping_add(1);
 
-        self.write(addr, value);
+        self.write_u8(addr, value);
         self.update_zn_flags(value);
     }
 
@@ -255,9 +255,9 @@ impl Cpu {
     /// Decrement value by 1
     pub fn dec(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr).wrapping_sub(1);
+        let value = self.read_u8(addr).wrapping_sub(1);
 
-        self.write(addr, value);
+        self.write_u8(addr, value);
         self.update_zn_flags(value);
     }
 
@@ -288,7 +288,7 @@ impl Cpu {
     /// Compare value with accumulator
     pub fn cmp(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         self.compare_with(self.accumulator, value);
     }
@@ -296,7 +296,7 @@ impl Cpu {
     /// Compare value with X register
     pub fn cpx(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         self.compare_with(self.register_x, value);
     }
@@ -304,9 +304,103 @@ impl Cpu {
     /// Compare value with Y register
     pub fn cpy(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
-        let value = self.read(addr);
+        let value = self.read_u8(addr);
 
         self.compare_with(self.register_y, value);
+    }
+
+    /// Jump to address
+    pub fn jmp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        self.program_counter = addr;
+    }
+
+    /// Jump to subroutine
+    pub fn jsr(&mut self) {
+        // Push the address of the next instruction onto the
+        // stack, which is the address at PC + the size of the
+        // instruction.
+        let return_addr = self.program_counter + 1;
+        self.push_u16(return_addr);
+
+        // Then jump to the subroutine.
+        self.jmp(&AddressingMode::Absolute);
+    }
+
+    /// Return from subroutine
+    pub fn rts(&mut self) {
+        // Pop the return address from the stack and jump to
+        // it, incrementing by 1 because of the instruction.
+        self.program_counter = self.pop_u16() + 1;
+    }
+
+    /// Return from interrupt
+    pub fn rti(&mut self) {
+        // On returning from an interrupt, first pop the status
+        // register P from the stack, remove the break flag,
+        // and pop the program counter PC.
+        self.status = CpuFlags::from_bits_retain(self.pop_u8());
+        self.status.remove(CpuFlags::BREAK);
+        self.status.insert(CpuFlags::UNUSED);
+
+        self.program_counter = self.pop_u16();
+    }
+
+    fn branch(&mut self, condition: bool) {
+        if condition {
+            // Get the address to branch to: the signed
+            // relative offset is given by the value stored at
+            // the current program counter (the label in "BNE
+            // LABEL", for example), so the address to jump to
+            // is the current program counter plus 1 (the size
+            // of the instruction itself) plus the offset.
+            let offset = self.read_u8(self.program_counter) as i8;
+            let addr = self.program_counter.wrapping_add(1).wrapping_add(offset as u16);
+
+            // Then, since the condition is fulfilled, actually
+            // branch to the new address.
+            self.program_counter = addr;
+        }
+    }
+
+    /// Branch if not equal
+    pub fn bne(&mut self) {
+        self.branch(!self.status.contains(CpuFlags::ZERO));
+    }
+
+    /// Branch if overflow set
+    pub fn bvs(&mut self) {
+        self.branch(self.status.contains(CpuFlags::OVERFLOW));
+    }
+
+    /// Branch if overflow clear
+    pub fn bvc(&mut self) {
+        self.branch(!self.status.contains(CpuFlags::OVERFLOW));
+    }
+
+    /// Branch if positive
+    pub fn bpl(&mut self) {
+        self.branch(!self.status.contains(CpuFlags::NEGATIVE));
+    }
+
+    /// Branch if negative
+    pub fn bmi(&mut self) {
+        self.branch(self.status.contains(CpuFlags::NEGATIVE));
+    }
+
+    /// Branch if equal
+    pub fn beq(&mut self) {
+        self.branch(self.status.contains(CpuFlags::ZERO));
+    }
+
+    /// Branch if carry set
+    pub fn bcs(&mut self) {
+        self.branch(self.status.contains(CpuFlags::CARRY));
+    }
+
+    /// Branch if carry clear
+    pub fn bcc(&mut self) {
+        self.branch(!self.status.contains(CpuFlags::CARRY));
     }
 }
 
@@ -440,6 +534,7 @@ lazy_static! {
         Opcode::new(0x90, "BCC", 2, 2, AddressingMode::Implicit),
         Opcode::new(0x10, "BPL", 2, 2, AddressingMode::Implicit),
 
+        // Bit tests
         Opcode::new(0x24, "BIT", 2, 3, AddressingMode::ZeroPage),
         Opcode::new(0x2c, "BIT", 3, 4, AddressingMode::Absolute),
 

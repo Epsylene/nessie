@@ -22,9 +22,8 @@ use crate::cpu::Cpu;
 //    the instruction (for example, LDX #$c0 loads the value
 //    0xc0 into the register, not the value stored at the
 //    address 0xc0);
-//  - Implicit: instructions that don't deal with memory
-//    locations are said to have implicit addressing -- the
-//    argument is implied by the instruction;
+//  - Implicit: instructions that deal with mandatory data or
+//    destinations--the argument is implied by the instruction;
 //  - Indirect (($c000)): only used by JMP. The byte stored at
 //    the argument address and the byte after that are used to
 //    form the new address. For example, if 0x0120 contains the
