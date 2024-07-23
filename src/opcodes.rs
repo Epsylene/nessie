@@ -33,6 +33,14 @@ impl Cpu {
         self.accumulator = value;
         self.update_zn_flags(self.accumulator);
     }
+
+    fn set_carry_flag(&mut self) {
+        self.status.insert(CpuFlags::CARRY);
+    }
+
+    fn clear_carry_flag(&mut self) {
+        self.status.remove(CpuFlags::CARRY);
+    }
     
     fn acc_add_with_carry(&mut self, data: u8) {
         // Add value to accumulator, together with the carry
@@ -44,9 +52,9 @@ impl Cpu {
         // (0xff), since that is the largest value for an
         // unsigned byte.
         if result > 0xff {
-            self.status.insert(CpuFlags::CARRY);
+            self.set_carry_flag();
         } else {
-            self.status.remove(CpuFlags::CARRY);
+            self.clear_carry_flag();
         }
 
         // Then set the overflow flag. Overflow occurs when the
@@ -64,9 +72,9 @@ impl Cpu {
         // has occured.
         let result = result as u8;
         if (result ^ self.accumulator) & (result ^ data) & 0x80 != 0 {
-            self.status.insert(CpuFlags::OVERFLOW);
+            self.set_carry_flag();
         } else {
-            self.status.remove(CpuFlags::OVERFLOW);
+            self.clear_carry_flag();
         }
 
         // Set the result in the accumulator and update the Z/N
@@ -92,19 +100,13 @@ impl Cpu {
         self.update_zn_flags(self.register_x);
     }
 
-    /// Increment the X register
-    pub fn inx(&mut self) {
-        self.register_x = self.register_x.wrapping_add(1);
-        self.update_zn_flags(self.register_x);
-    }
-
     /// Store the accumulator in memory
     pub fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         self.write(addr, self.accumulator);
     }
 
-    /// Add with carry
+    /// Add value to accumulator with carry
     pub fn adc(&mut self, mode: &AddressingMode) {
         // Get value to be added
         let addr = self.get_op_address(mode);
@@ -115,7 +117,7 @@ impl Cpu {
         self.acc_add_with_carry(value);
     }
 
-    /// Subtract with carry
+    /// Subtract value off accumulator with carry
     pub fn sbc(&mut self, mode: &AddressingMode) {
         // Get value to be subtracted
         let addr = self.get_op_address(mode);
@@ -129,7 +131,7 @@ impl Cpu {
         self.acc_add_with_carry(value as u8);
     } 
 
-    /// Binary AND
+    /// Bit AND between accumulator and value
     pub fn and(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         let value = self.read(addr);
@@ -137,7 +139,7 @@ impl Cpu {
         self.set_accumulator(self.accumulator & value);
     }
 
-    /// Binary XOR
+    /// Bit XOR between accumulator and value
     pub fn eor(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         let value = self.read(addr);
@@ -145,12 +147,166 @@ impl Cpu {
         self.set_accumulator(self.accumulator ^ value);
     }
 
-    /// Binary OR
+    /// Bit OR between accumulator and value 
     pub fn ora(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         let value = self.read(addr);
 
         self.set_accumulator(self.accumulator | value);
+    }
+
+    /// Shift value by 1 bit to the left
+    pub fn asl(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let mut value = self.read(addr);
+
+        // Set the carry flag if the leftmost bit is 1
+        if value >> 7 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        // Shift the value left by one, and set the zero and
+        // negative flags
+        value <<= 1;
+        self.write(addr, value);
+        self.update_zn_flags(value);
+    }
+
+    /// Shift value by 1 bit to the right
+    pub fn lsr(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let mut value = self.read(addr);
+
+        // Set the carry flag if the rightmost bit is 1
+        if value & 1 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        // Shift the value right by one, and set the zero and
+        // negative flags
+        value >>= 1;
+        self.write(addr, value);
+        self.update_zn_flags(value);
+    }
+
+    /// Rotate value by 1 bit to the left
+    pub fn rol(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let mut value = self.read(addr);
+
+        // Set the carry flag if the leftmost bit is 1
+        let carry = self.status.contains(CpuFlags::CARRY) as u8;
+        if value >> 7 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        // Shift the value left by one, and set bit 0 to the
+        // carry bit
+        value <<= 1;
+        value |= carry;
+
+        self.write(addr, value);
+        self.update_zn_flags(value);
+    }
+
+    /// Rotate value by 1 bit to the right
+    pub fn ror(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let mut value = self.read(addr);
+
+        // Set the carry flag if the rightmost bit is 1
+        let carry = self.status.contains(CpuFlags::CARRY) as u8;
+        if value & 1 == 1 {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        // Shift the value right by one, and set bit 7 to the
+        // carry bit
+        value >>= 1;
+        value |= carry << 7;
+
+        self.write(addr, value);
+        self.update_zn_flags(value);
+    }
+
+    /// Increment value by 1
+    pub fn inc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr).wrapping_add(1);
+
+        self.write(addr, value);
+        self.update_zn_flags(value);
+    }
+
+    /// Increment X register by 1
+    pub fn inx(&mut self) {
+        self.register_x = self.register_x.wrapping_add(1);
+        self.update_zn_flags(self.register_x);
+    }
+
+    /// Decrement value by 1
+    pub fn dec(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr).wrapping_sub(1);
+
+        self.write(addr, value);
+        self.update_zn_flags(value);
+    }
+
+    /// Decrement X register by 1
+    pub fn dex(&mut self) {
+        self.register_x = self.register_x.wrapping_sub(1);
+        self.update_zn_flags(self.register_x);
+    }
+
+    /// Decrement Y register by 1
+    pub fn dey(&mut self) {
+        self.register_y = self.register_y.wrapping_sub(1);
+        self.update_zn_flags(self.register_y);
+    }
+
+    fn compare_with(&mut self, reg: u8, value: u8) {
+        // Set carry if R >= M
+        if reg >= value {
+            self.set_carry_flag();
+        } else {
+            self.clear_carry_flag();
+        }
+
+        // If R == M (that is, R - M == 0), set zero flag.
+        self.update_zn_flags(reg.wrapping_sub(value));
+    }
+
+    /// Compare value with accumulator
+    pub fn cmp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        self.compare_with(self.accumulator, value);
+    }
+
+    /// Compare value with X register
+    pub fn cpx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        self.compare_with(self.register_x, value);
+    }
+
+    /// Compare value with Y register
+    pub fn cpy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read(addr);
+
+        self.compare_with(self.register_y, value);
     }
 }
 
@@ -231,6 +387,7 @@ lazy_static! {
         Opcode::new(0x6e, "ROR", 3, 6, AddressingMode::Absolute),
         Opcode::new(0x7e, "ROR", 3, 7, AddressingMode::AbsoluteX),
 
+        // Increments and decrements
         Opcode::new(0xe6, "INC", 2, 5, AddressingMode::ZeroPage),
         Opcode::new(0xf6, "INC", 2, 6, AddressingMode::ZeroPageX),
         Opcode::new(0xee, "INC", 3, 6, AddressingMode::Absolute),
@@ -247,6 +404,7 @@ lazy_static! {
         Opcode::new(0xca, "DEX", 1, 2, AddressingMode::Implicit),
         Opcode::new(0x88, "DEY", 1, 2, AddressingMode::Implicit),
 
+        // Comparisons
         Opcode::new(0xc9, "CMP", 2, 2, AddressingMode::Immediate),
         Opcode::new(0xc5, "CMP", 2, 3, AddressingMode::ZeroPage),
         Opcode::new(0xd5, "CMP", 2, 4, AddressingMode::ZeroPageX),
@@ -256,13 +414,13 @@ lazy_static! {
         Opcode::new(0xc1, "CMP", 2, 6, AddressingMode::IndirectX),
         Opcode::new(0xd1, "CMP", 2, 5, AddressingMode::IndirectY),
 
-        Opcode::new(0xc0, "CPY", 2, 2, AddressingMode::Immediate),
-        Opcode::new(0xc4, "CPY", 2, 3, AddressingMode::ZeroPage),
-        Opcode::new(0xcc, "CPY", 3, 4, AddressingMode::Absolute),
-
         Opcode::new(0xe0, "CPX", 2, 2, AddressingMode::Immediate),
         Opcode::new(0xe4, "CPX", 2, 3, AddressingMode::ZeroPage),
         Opcode::new(0xec, "CPX", 3, 4, AddressingMode::Absolute),
+
+        Opcode::new(0xc0, "CPY", 2, 2, AddressingMode::Immediate),
+        Opcode::new(0xc4, "CPY", 2, 3, AddressingMode::ZeroPage),
+        Opcode::new(0xcc, "CPY", 3, 4, AddressingMode::Absolute),
 
         // Branching
         Opcode::new(0x4c, "JMP", 3, 3, AddressingMode::Absolute),

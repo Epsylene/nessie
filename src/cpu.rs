@@ -197,8 +197,6 @@ impl Cpu {
                 }
                 // TAX (Transfer Accumulator to X)
                 0xaa => self.tax(),
-                // INX (Increment X Register)
-                0xe8 => self.inx(),
                 // ADC (Add with Carry)
                 0x69 | 0x65 | 0x75 | 0x6d | 0x7d | 0x79 | 0x61 | 0x71  => {
                     self.adc(mode)
@@ -218,6 +216,48 @@ impl Cpu {
                 // ORA (Logical Inclusive OR)
                 0x09 | 0x05 | 0x15 | 0x0d | 0x1d | 0x19 | 0x01 | 0x11 => {
                     self.ora(mode)
+                }
+                // ASL (Arithmetic Shift Left)
+                0x0a | 0x06 | 0x16 | 0x0e | 0x1e => {
+                    self.asl(mode)
+                }
+                // LSR (Logical Shift Right)
+                0x4a | 0x46 | 0x56 | 0x4e | 0x5e => {
+                    self.lsr(mode)
+                }
+                // ROL (Rotate Left)
+                0x2a | 0x26 | 0x36 | 0x2e | 0x3e => {
+                    self.rol(mode)
+                }
+                // ROR (Rotate Right)
+                0x6a | 0x66 | 0x76 | 0x6e | 0x7e => {
+                    self.ror(mode)
+                }
+                // INC (Increment Memory)
+                0xe6 | 0xf6 | 0xee | 0xfe => {
+                    self.inc(mode)
+                }
+                // INX (Increment X Register)
+                0xe8 => self.inx(),
+                // DEC (Decrement Memory)
+                0xc6 | 0xd6 | 0xce | 0xde => {
+                    self.dec(mode)
+                }
+                // DEX (Decrement X Register)
+                0xca => self.dex(),
+                // DEY (Decrement Y Register)
+                0x88 => self.dey(),
+                // CMP (Compare Accumulator)
+                0xc9 | 0xc5 | 0xd5 | 0xcd | 0xdd | 0xd9 | 0xc1 | 0xd1 => {
+                    self.cmp(mode)
+                }
+                // CPX (Compare X Register)
+                0xe0 | 0xe4 | 0xec => {
+                    self.cpx(mode)
+                }
+                // CPY (Compare Y Register)
+                0xc0 | 0xc4 | 0xcc => {
+                    self.cpy(mode)
                 }
                 _ => todo!(),
             }
