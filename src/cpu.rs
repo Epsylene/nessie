@@ -184,20 +184,41 @@ impl Cpu {
             let code = self.read(self.program_counter);
             let opcode = OP_MAP.get(&code).unwrap_or_else(|| panic!("Invalid opcode: 0x{:X}", code));
             self.program_counter += 1;
-
+            
             // ...and executing the corresponding instruction
+            // with the given addressing mode.
+            let mode = &opcode.mode;
             match code {
                 // BRK (Break): force an interrupt request
                 0x00 => return,
                 // LDA (Load Accumulator)
                 0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
-                    self.lda(&opcode.mode)
+                    self.lda(mode)
                 }
                 // TAX (Transfer Accumulator to X)
                 0xaa => self.tax(),
                 // INX (Increment X Register)
                 0xe8 => self.inx(),
-
+                // ADC (Add with Carry)
+                0x69 | 0x65 | 0x75 | 0x6d | 0x7d | 0x79 | 0x61 | 0x71  => {
+                    self.adc(mode)
+                },
+                // SBC (Subtract with Carry)
+                0xe9 | 0xe5 | 0xf5 | 0xed | 0xfd | 0xf9 | 0xe1 | 0xf1 => {
+                    self.sbc(mode)
+                }
+                // AND (Logical AND)
+                0x29 | 0x25 | 0x35 | 0x2d | 0x3d | 0x39 | 0x21 | 0x31 => {
+                    self.and(mode)
+                }
+                // EOR (Exclusive OR)
+                0x49 | 0x45 | 0x55 | 0x4d | 0x5d | 0x59 | 0x41 | 0x51 => {
+                    self.eor(mode)
+                }
+                // ORA (Logical Inclusive OR)
+                0x09 | 0x05 | 0x15 | 0x0d | 0x1d | 0x19 | 0x01 | 0x11 => {
+                    self.ora(mode)
+                }
                 _ => todo!(),
             }
 
@@ -225,5 +246,61 @@ impl Cpu {
         } else {
             self.status.remove(CpuFlags::NEGATIVE);
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::cpu::Cpu;
+
+    #[test]
+    fn test_0xa9_lda_immediate_load_data() {
+        let mut cpu = Cpu::new();
+        cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
+
+        assert_eq!(cpu.accumulator, 0x05);
+        assert!(cpu.status.bits() & 0b0000_0010 == 0b00);
+        assert!(cpu.status.bits() & 0b1000_0000 == 0);
+    }
+
+    #[test]
+    fn test_0xa9_lda_zero_flag() {
+        let mut cpu = Cpu::new();
+        cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
+        assert!(cpu.status.bits() & 0b0000_0010 == 0b10);
+    }
+
+    #[test]
+    fn test_lda_from_memory() {
+        let mut cpu = Cpu::new();
+        cpu.write(0x10, 0x55);
+
+        cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
+
+        assert_eq!(cpu.accumulator, 0x55);
+    }
+
+    #[test]
+    fn test_0xaa_tax_move_a_to_x() {
+        let mut cpu = Cpu::new();
+        cpu.load_and_run(vec![0xa9, 0x0a, 0xaa, 0x00]);
+
+        assert_eq!(cpu.register_x, 10)
+    }
+    
+    #[test]
+    fn test_5_ops_working_together() {
+        let mut cpu = Cpu::new();
+        cpu.load_and_run(vec![0xa9, 0xc0, 0xaa, 0xe8, 0x00]);
+
+        assert_eq!(cpu.register_x, 0xc1)
+    }
+
+    #[test]
+    fn test_inx_overflow() {
+        let mut cpu = Cpu::new();
+        cpu.load_and_run(vec![0xa9, 0xff, 0xaa, 0xe8, 0x00]);
+
+        assert_eq!(cpu.register_x, 0)
     }
 }
