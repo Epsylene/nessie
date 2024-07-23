@@ -58,10 +58,10 @@ impl Cpu {
     pub fn get_op_address(&self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Absolute => self.read_u16(self.program_counter),            
-            AddressingMode::ZeroPage => self.read(self.program_counter) as u16,
+            AddressingMode::ZeroPage => self.read_u8(self.program_counter) as u16,
 
-            AddressingMode::ZeroPageX => self.read(self.program_counter).wrapping_add(self.register_x) as u16,
-            AddressingMode::ZeroPageY => self.read(self.program_counter).wrapping_add(self.register_y) as u16,
+            AddressingMode::ZeroPageX => self.read_u8(self.program_counter).wrapping_add(self.register_x) as u16,
+            AddressingMode::ZeroPageY => self.read_u8(self.program_counter).wrapping_add(self.register_y) as u16,
             
             AddressingMode::AbsoluteX => self.read_u16(self.program_counter).wrapping_add(self.register_x as u16),
             AddressingMode::AbsoluteY => self.read_u16(self.program_counter).wrapping_add(self.register_y as u16),
@@ -73,11 +73,11 @@ impl Cpu {
                 self.read_u16(ptr)
             },
             AddressingMode::IndirectX => {
-                let ptr = self.read(self.program_counter).wrapping_add(self.register_x);
+                let ptr = self.read_u8(self.program_counter).wrapping_add(self.register_x);
                 self.read_u16(ptr as u16)
             }
             AddressingMode::IndirectY => {
-                let ptr = self.read(self.program_counter);
+                let ptr = self.read_u8(self.program_counter);
                 self.read_u16(ptr as u16).wrapping_add(self.register_y as u16)
             }
 

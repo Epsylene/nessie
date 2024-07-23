@@ -42,10 +42,11 @@ pub struct Cpu {
     //     are set or cleared depending on the result of the
     //     last executed instruction.
     pub program_counter: u16,
+    pub stack_pointer: u8,
     pub accumulator: u8,
-    pub status: CpuFlags,
     pub register_x: u8,
     pub register_y: u8,
+    pub status: CpuFlags,
     memory: [u8; 0xFFFF],
 }
 
@@ -92,24 +93,47 @@ bitflags! {
 }
 
 impl Cpu {
+    // The stack of the 6502 is hardcoded between the adresses
+    // 0x0100 and 0x01FF (the second page of memory, after the
+    // famous "zero page"). It is used to store the return
+    // addresses of subroutines, the status of the processor
+    // when an interrupt occurs, and for register preservation.
+    // Upon reset, the CPU pushes the program counter and
+    // processor status to the stack. The stack starts at
+    // 0x1FF, and the stack pointer is decremented 3 times (2
+    // bytes for PC, 1 for P) to 0x1FD, so the "reset offset"
+    // with the base is 0xFD.
+    pub const STACK_BASE: u16 = 0x0100;
+    pub const STACK_RESET: u8 = 0xfd;
+
     pub fn new() -> Self {
+        // At startup, the registers are all set to 0, except
+        // the stack pointer which is at the stack reset
+        // offset. The status register is set with two bits:
+        // the unused flag, which is always set to 1 because
+        // the bit it corresponds to is hardwired in the
+        // internal logic circuitry of the CPU to a 'high'
+        // signal line, and the interrupt disable flag, because
+        // the hardware might be in a state that triggers an
+        // interrupt before the system is ready to handle it.
         Self {
             program_counter: 0,
             accumulator: 0,
-            status: CpuFlags::NONE | CpuFlags::INTERRUPT_DISABLE,
+            stack_pointer: Cpu::STACK_RESET,
             register_x: 0,
             register_y: 0,
+            status: CpuFlags::NONE | CpuFlags::INTERRUPT_DISABLE,
             memory: [0; 0xFFFF],
         }
     }
 
     /// Read a byte from the CPU's memory
-    pub fn read(&self, pos: u16) -> u8 {
+    pub fn read_u8(&self, pos: u16) -> u8 {
         self.memory[pos as usize]
     }
 
     /// Write a byte to the CPU's memory
-    pub fn write(&mut self, pos: u16, data: u8) {
+    pub fn write_u8(&mut self, pos: u16, data: u8) {
         self.memory[pos as usize] = data;
     }
 
@@ -118,8 +142,8 @@ impl Cpu {
         // The NES CPU uses little-endian memory addressing, so
         // we need to split each word in two 8-bit chunks and
         // read them in the correct order
-        let lo = self.read(pos) as u16;
-        let hi = self.read(pos.wrapping_add(1)) as u16;
+        let lo = self.read_u8(pos) as u16;
+        let hi = self.read_u8(pos.wrapping_add(1)) as u16;
 
         (hi << 8) | lo
     }
@@ -132,8 +156,51 @@ impl Cpu {
         let hi = (data >> 8) as u8;
         let lo = (data & 0xff) as u8;
         
-        self.write(pos, lo);
-        self.write(pos + 1, hi);
+        self.write_u8(pos, lo);
+        self.write_u8(pos + 1, hi);
+    }
+
+    /// Push a byte to the stack
+    pub fn push_u8(&mut self, data: u8) {
+        // To push a byte to the stack, we get its base address
+        // (0x0100), offset by the stack pointer, and write at
+        // that address.
+        let pos = Cpu::STACK_BASE + self.stack_pointer as u16;
+        self.write_u8(pos, data);
+
+        // Then, the stack pointer is decremented by one, since
+        // the stack grows downwards in memory.
+        self.stack_pointer = self.stack_pointer.wrapping_sub(1);
+    }
+
+    /// Pop a byte from the stack
+    pub fn pop_u8(&mut self) -> u8 {
+        // Move the stack pointer one byte up the stack and
+        // read the exposed value.
+        self.stack_pointer = self.stack_pointer.wrapping_add(1);
+        let pos = Cpu::STACK_BASE + self.stack_pointer as u16;
+        self.read_u8(pos)
+    }
+
+    /// Push a word to the stack
+    pub fn push_u16(&mut self, data: u16) {
+        // Split into two bytes and push in the correct order
+        // (little endian).
+        let hi = (data >> 8) as u8;
+        let lo = (data & 0xff) as u8;
+
+        self.push_u8(hi);
+        self.push_u8(lo);
+    }
+
+    /// Pop a word from the stack
+    pub fn pop_u16(&mut self) -> u16 {
+        // Pop two bytes from the stack and merge them into a
+        // word.
+        let lo = self.pop_u8() as u16;
+        let hi = self.pop_u8() as u16;
+
+        (hi << 8) | lo
     }
 
     pub fn load(&mut self, program: Vec<u8>) {
@@ -149,12 +216,14 @@ impl Cpu {
 
     pub fn reset(&mut self) {
         // Resetting restores the state of all the registers,
-        // and initializes the program counter with the value
+        // initializes the program counter with the value
         // stored at 0xFFFC (which tells the CPU where to start
-        // the execution of the program) and the status flags
-        // INT and None.
+        // the execution of the program), resets the stack
+        // pointer, and disables interrupts.
         self.accumulator = 0;
         self.register_x = 0;
+        self.register_y = 0;
+        self.stack_pointer = Cpu::STACK_RESET;
         self.status = CpuFlags::NONE | CpuFlags::INTERRUPT_DISABLE;
 
         self.program_counter = self.read_u16(0xfffc);
@@ -176,12 +245,12 @@ impl Cpu {
         // of bytes, each either referecing an opcode
         // (instruction) or a parameter for the previous
         // command. For example, the program [0xa9, 0x05, 0x00]
-        // loads into the acumulator (0xa9) the value 0x05 and
+        // loads into the acumulator (0xa9) a value (0x05) and
         // then breaks (0x00).
         loop {
             // To execute the program, we read it byte by byte,
             // retrieving the opcode...
-            let code = self.read(self.program_counter);
+            let code = self.read_u8(self.program_counter);
             let opcode = OP_MAP.get(&code).unwrap_or_else(|| panic!("Invalid opcode: 0x{:X}", code));
             self.program_counter += 1;
             
@@ -313,7 +382,7 @@ mod test {
     #[test]
     fn test_lda_from_memory() {
         let mut cpu = Cpu::new();
-        cpu.write(0x10, 0x55);
+        cpu.write_u8(0x10, 0x55);
 
         cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
 
