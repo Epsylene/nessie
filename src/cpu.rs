@@ -68,7 +68,7 @@ bitflags! {
         //  decimal arithmetic on numbers, instead of
         //  hexadecimal (for example, $99 + $01 returns $00
         //  with a carry, instead of $9A).
-        // - Break Command (B): set when a BRK instruction has
+        // - Break Flag (B): set when a BRK instruction has
         //  been executed (forcing an interrupt request).
         // - None: unused bit between the B and V flags.
         // - Overflow Flag (V): set during arithmetic
@@ -209,8 +209,8 @@ impl Cpu {
         // vector (0xFFFC), so that the reset interrupt can
         // then pick it up and start the execution of the
         // program.
-        self.memory[0x8000 .. (0x8000 + program.len())].copy_from_slice(&program[..]);
-        self.write_u16(0xfffc, 0x8000);
+        self.memory[0x600 .. (0x600 + program.len())].copy_from_slice(&program[..]);
+        self.write_u16(0xfffc, 0x600);
     }
 
     pub fn reset(&mut self) {
@@ -240,12 +240,16 @@ impl Cpu {
         self.load(program);
         self.reset();
 
-        // The program can then be executed. It is a succession
-        // of bytes, each either referecing an opcode
-        // (instruction) or a parameter for the previous
-        // command. For example, the program [0xa9, 0x05, 0x00]
-        // loads into the acumulator (0xa9) a value (0x05) and
-        // then breaks (0x00).
+        // Then the CPU is ready to execute the program.
+        self.run();
+    }
+
+    pub fn run(&mut self) {
+        // The program is a succession of bytes, each either
+        // referecing an opcode (instruction) or a parameter
+        // for the previous command. For example, the program
+        // [0xa9, 0x05, 0x00] loads into the acumulator (0xa9)
+        // a value (0x05) and then breaks (0x00).
         loop {
             // To execute the program, we read it byte by byte,
             // retrieving the opcode...
