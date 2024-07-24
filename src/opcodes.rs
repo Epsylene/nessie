@@ -34,30 +34,6 @@ impl Cpu {
         self.update_zn_flags(self.accumulator);
     }
 
-    /// Load accumulator with value
-    pub fn lda(&mut self, mode: &AddressingMode) {
-        // The address to load from is the operand of the
-        // instruction, which is the next byte in memory
-        let addr = self.get_op_address(mode);
-        let value = self.read_u8(addr);
-
-        // Then the accumulator is loaded with the value, and
-        // zero/negative value flags are checked.
-        self.set_accumulator(value);
-    }
-
-    /// Copy the accumulator to the X register
-    pub fn tax(&mut self) {
-        self.register_x = self.accumulator;
-        self.update_zn_flags(self.register_x);
-    }
-
-    /// Store the accumulator in memory
-    pub fn sta(&mut self, mode: &AddressingMode) {
-        let addr = self.get_op_address(mode);
-        self.write_u8(addr, self.accumulator);
-    }
-
     fn acc_add_with_carry(&mut self, data: u8) {
         // Add value to accumulator, together with the carry
         // bit
@@ -417,6 +393,165 @@ impl Cpu {
     pub fn bcc(&mut self) {
         self.branch(!self.status.contains(CpuFlags::CARRY));
     }
+
+    /// Bit test
+    pub fn bit(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read_u8(addr);
+
+        // The zero flag is set if the mask in the accumulator
+        // and the value in memory do not match. Then, the
+        // overflow and negative flags are set to bits 6 and 7,
+        // respectively.
+        self.status.set(CpuFlags::ZERO, self.accumulator & value == 0);
+        self.status.set(CpuFlags::NEGATIVE, value & 0x80 != 0);
+        self.status.set(CpuFlags::OVERFLOW, value & 0x40 != 0);
+    }
+
+    /// Load accumulator with value
+    pub fn lda(&mut self, mode: &AddressingMode) {
+        // The address to load from is the operand of the
+        // instruction, which is the next byte in memory
+        let addr = self.get_op_address(mode);
+        let value = self.read_u8(addr);
+
+        // Then the accumulator is loaded with the value, and
+        // zero/negative value flags are checked.
+        self.set_accumulator(value);
+    }
+
+    /// Load X register with value
+    pub fn ldx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read_u8(addr);
+
+        self.register_x = value;
+        self.update_zn_flags(self.register_x);
+    }
+
+    /// Load Y register with value
+    pub fn ldy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        let value = self.read_u8(addr);
+
+        self.register_y = value;
+        self.update_zn_flags(self.register_y);
+    }
+
+    /// Store accumulator in memory
+    pub fn sta(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        self.write_u8(addr, self.accumulator);
+    }
+
+    /// Store X register in memory
+    pub fn stx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        self.write_u8(addr, self.register_x);
+    }
+
+    /// Store Y register in memory
+    pub fn sty(&mut self, mode: &AddressingMode) {
+        let addr = self.get_op_address(mode);
+        self.write_u8(addr, self.register_y);
+    }
+
+    /// Clear decimal flag
+    pub fn cld(&mut self) {
+        self.status.remove(CpuFlags::DECIMAL_MODE);
+    }
+
+    /// Clear interrupt disable flag
+    pub fn cli(&mut self) {
+        self.status.remove(CpuFlags::INTERRUPT_DISABLE);
+    }
+
+    /// Clear overflow flag
+    pub fn clv(&mut self) {
+        self.status.remove(CpuFlags::OVERFLOW);
+    }
+
+    /// Clear carry flag
+    pub fn clc(&mut self) {
+        self.status.remove(CpuFlags::CARRY);
+    }
+
+    /// Set carry flag
+    pub fn sec(&mut self) {
+        self.status.insert(CpuFlags::CARRY);
+    }
+
+    /// Set interrupt disable flag
+    pub fn sei(&mut self) {
+        self.status.insert(CpuFlags::INTERRUPT_DISABLE);
+    }
+
+    /// Set decimal flag
+    pub fn sed(&mut self) {
+        self.status.insert(CpuFlags::DECIMAL_MODE);
+    }
+
+    /// Transfer accumulator to X register
+    pub fn tax(&mut self) {
+        self.register_x = self.accumulator;
+        self.update_zn_flags(self.register_x);
+    }
+
+    /// Transfer accumulator to Y register
+    pub fn tay(&mut self) {
+        self.register_y = self.accumulator;
+        self.update_zn_flags(self.register_y);
+    }
+
+    /// Transfer stack pointer to X register
+    pub fn tsx(&mut self) {
+        self.register_x = self.stack_pointer;
+        self.update_zn_flags(self.register_x);
+    }
+
+    /// Transfer X register to accumulator
+    pub fn txa(&mut self) {
+        self.accumulator = self.register_x;
+        self.update_zn_flags(self.accumulator);
+    }
+
+    /// Transfer X register to stack pointer
+    pub fn txs(&mut self) {
+        self.stack_pointer = self.register_x;
+    }
+
+    /// Transfer Y register to accumulator
+    pub fn tya(&mut self) {
+        self.accumulator = self.register_y;
+        self.update_zn_flags(self.accumulator);
+    }
+
+    /// Push the contents of the accumulator onto the stack
+    pub fn pha(&mut self) {
+        self.push_u8(self.accumulator);
+    }
+
+    /// Pull the contents of the stack into the accumulator
+    pub fn pla(&mut self) {
+        self.accumulator = self.pop_u8();
+        self.update_zn_flags(self.accumulator);
+    }
+
+    /// Push the contents of the status register onto the stack
+    pub fn php(&mut self) {
+        self.push_u8(self.status.bits());
+    }
+
+    /// Pull the contents of the stack into the status register
+    pub fn plp(&mut self) {
+        self.status = CpuFlags::from_bits_truncate(self.pop_u8());
+        self.status.insert(CpuFlags::UNUSED);
+    }
+
+    /// No operation
+    pub fn nop(&mut self) {
+        // Do nothing
+    }
 }
 
 lazy_static! {
@@ -553,7 +688,7 @@ lazy_static! {
         Opcode::new(0x24, "BIT", 2, 3, AddressingMode::ZeroPage),
         Opcode::new(0x2c, "BIT", 3, 4, AddressingMode::Absolute),
 
-        // Stores and loads
+        // Loads and stores
         Opcode::new(0xa9, "LDA", 2, 2, AddressingMode::Immediate),
         Opcode::new(0xa5, "LDA", 2, 3, AddressingMode::ZeroPage),
         Opcode::new(0xb5, "LDA", 2, 4, AddressingMode::ZeroPageX),
@@ -591,7 +726,7 @@ lazy_static! {
         Opcode::new(0x94, "STY", 2, 4, AddressingMode::ZeroPageX),
         Opcode::new(0x8c, "STY", 3, 4, AddressingMode::Absolute),
 
-        // Clear flags
+        // Set/clear flags
         Opcode::new(0xD8, "CLD", 1, 2, AddressingMode::Implicit),
         Opcode::new(0x58, "CLI", 1, 2, AddressingMode::Implicit),
         Opcode::new(0xb8, "CLV", 1, 2, AddressingMode::Implicit),
@@ -600,6 +735,7 @@ lazy_static! {
         Opcode::new(0x78, "SEI", 1, 2, AddressingMode::Implicit),
         Opcode::new(0xf8, "SED", 1, 2, AddressingMode::Implicit),
 
+        // Transfer
         Opcode::new(0xaa, "TAX", 1, 2, AddressingMode::Implicit),
         Opcode::new(0xa8, "TAY", 1, 2, AddressingMode::Implicit),
         Opcode::new(0xba, "TSX", 1, 2, AddressingMode::Implicit),

@@ -261,12 +261,6 @@ impl Cpu {
             match code {
                 // BRK (Break): force an interrupt request
                 0x00 => return,
-                // LDA (Load Accumulator)
-                0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
-                    self.lda(mode)
-                }
-                // TAX (Transfer Accumulator to X)
-                0xaa => self.tax(),
                 // ADC (Add with Carry)
                 0x69 | 0x65 | 0x75 | 0x6d | 0x7d | 0x79 | 0x61 | 0x71  => {
                     self.adc(mode)
@@ -351,7 +345,64 @@ impl Cpu {
                 0x50 => self.bvc(),
                 // BVS (Branch if Overflow Set)
                 0x70 => self.bvs(),
-                _ => todo!(),
+                // BIT (Bit Test)
+                0x24 | 0x2c => self.bit(mode),
+                // LDA (Load Accumulator)
+                0xa9 | 0xa5 | 0xb5 | 0xad | 0xbd | 0xb9 | 0xa1 | 0xb1 => {
+                    self.lda(mode)
+                }
+                // LDX (Load X Register)
+                0xa2 | 0xa6 | 0xb6 | 0xae | 0xbe => {
+                    self.ldx(mode)
+                }
+                // LDY (Load Y Register)
+                0xa0 | 0xa4 | 0xb4 | 0xac | 0xbc => {
+                    self.ldy(mode)
+                }
+                // STA (Store Accumulator)
+                0x85 | 0x95 | 0x8d | 0x9d | 0x99 | 0x81 | 0x91 => {
+                    self.sta(mode)
+                }
+                // STX (Store X Register)
+                0x86 | 0x96 | 0x8e => self.stx(mode),
+                // STY (Store Y Register)
+                0x84 | 0x94 | 0x8c => self.sty(mode),
+                // CLD (Clear Decimal Mode)
+                0xd8 => self.cld(),
+                // CLI (Clear Interrupt Disable)
+                0x58 => self.cli(),
+                // CLV (Clear Overflow Flag)
+                0xb8 => self.clv(),
+                // CLC (Clear Carry Flag)
+                0x18 => self.clc(),
+                // SEC (Set Carry Flag)
+                0x38 => self.sec(),
+                // SEI (Set Interrupt Disable)
+                0x78 => self.sei(),
+                // SED (Set Decimal Flag)
+                0xf8 => self.sed(),
+                // TAX (Transfer Accumulator to X)
+                0xaa => self.tax(),
+                // TAY (Transfer Accumulator to Y)
+                0xa8 => self.tay(),
+                // TSX (Transfer Stack Pointer to X)
+                0xba => self.tsx(),
+                // TXA (Transfer X to Accumulator)
+                0x8a => self.txa(),
+                // TXS (Transfer X to Stack Pointer)
+                0x9a => self.txs(),
+                // TYA (Transfer Y to Accumulator)
+                0x98 => self.tya(),
+                // PHA (Push Accumulator)
+                0x48 => self.pha(),
+                // PLA (Pull Accumulator)
+                0x68 => self.pla(),
+                // PHP (Push Processor Status)
+                0x08 => self.php(),
+                // PLP (Pull Processor Status)
+                0x28 => self.plp(),
+                // NOP (No Operation)
+                _ => self.nop(),
             }
 
             // Then we move to the next instruction, which
