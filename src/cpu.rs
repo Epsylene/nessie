@@ -422,19 +422,11 @@ impl Cpu {
     pub fn update_zn_flags(&mut self, register: u8) {
         // If the register is 0, set the zero flag, otherwise
         // clear it
-        if register == 0 {
-            self.status.insert(CpuFlags::ZERO);
-        } else {
-            self.status.remove(CpuFlags::ZERO);
-        }
+        self.status.set(CpuFlags::ZERO, register == 0);
 
         // Set the negative flag if the negative bit of the
         // register is set
-        if register & 0b1000_0000 != 0 {
-            self.status.insert(CpuFlags::NEGATIVE);
-        } else {
-            self.status.remove(CpuFlags::NEGATIVE);
-        }
+        self.status.set(CpuFlags::NEGATIVE, register & 0b1000_0000 != 0);
     }
 }
 
