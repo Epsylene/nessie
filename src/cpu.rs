@@ -251,7 +251,9 @@ impl Cpu {
             // retrieving the opcode...
             let code = self.read_u8(self.program_counter);
             let opcode = OP_MAP.get(&code).unwrap_or_else(|| panic!("Invalid opcode: 0x{:X}", code));
+            
             self.program_counter += 1;
+            let state = self.program_counter;
             
             // ...and executing the corresponding instruction
             // with the given addressing mode.
@@ -354,7 +356,13 @@ impl Cpu {
 
             // Then we move to the next instruction, which
             // follows the last byte of the opcode in memory.
-            self.program_counter += opcode.bytes - 1;
+            // If the program counter has not been modified by
+            // the instruction (like a jump or a branch), we
+            // increment it by the number of bytes of the
+            // opcode.
+            if self.program_counter == state {
+                self.program_counter += (opcode.bytes - 1) as u16;
+            }
         }
     }
 
