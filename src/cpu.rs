@@ -141,7 +141,7 @@ impl Cpu {
     pub fn read_u16(&self, pos: u16) -> u16 {
         // The NES CPU uses little-endian memory addressing, so
         // we need to split each word in two 8-bit chunks and
-        // read them in the correct order
+        // read them in the correct order.
         let lo = self.read_u8(pos) as u16;
         let hi = self.read_u8(pos.wrapping_add(1)) as u16;
 
@@ -150,9 +150,8 @@ impl Cpu {
 
     /// Write a word to the CPU's memory
     pub fn write_u16(&mut self, pos: u16, data: u16) {
-        // The NES CPU uses little-endian memory addressing, so
-        // we need to split the 16-bit data into two 8-bit
-        // chunks and write them in the correct order
+        // Likewise, to write a 2-byte value we split it in two
+        // parts and write each in the correct order.
         let hi = (data >> 8) as u8;
         let lo = (data & 0xff) as u8;
         
@@ -287,19 +286,23 @@ impl Cpu {
                     self.ora(mode)
                 }
                 // ASL (Arithmetic Shift Left)
-                0x0a | 0x06 | 0x16 | 0x0e | 0x1e => {
+                0x0a => self.asl_a(),
+                0x06 | 0x16 | 0x0e | 0x1e => {
                     self.asl(mode)
                 }
                 // LSR (Logical Shift Right)
-                0x4a | 0x46 | 0x56 | 0x4e | 0x5e => {
+                0x4a => self.lsr_a(),
+                0x46 | 0x56 | 0x4e | 0x5e => {
                     self.lsr(mode)
                 }
                 // ROL (Rotate Left)
-                0x2a | 0x26 | 0x36 | 0x2e | 0x3e => {
+                0x2a => self.rol_a(),
+                0x26 | 0x36 | 0x2e | 0x3e => {
                     self.rol(mode)
                 }
                 // ROR (Rotate Right)
-                0x6a | 0x66 | 0x76 | 0x6e | 0x7e => {
+                0x6a => self.ror_a(),
+                0x66 | 0x76 | 0x6e | 0x7e => {
                     self.ror(mode)
                 }
                 // INC (Increment Memory)

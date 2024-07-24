@@ -34,55 +34,7 @@ impl Cpu {
         self.update_zn_flags(self.accumulator);
     }
 
-    fn set_carry_flag(&mut self) {
-        self.status.insert(CpuFlags::CARRY);
-    }
-
-    fn clear_carry_flag(&mut self) {
-        self.status.remove(CpuFlags::CARRY);
-    }
-    
-    fn acc_add_with_carry(&mut self, data: u8) {
-        // Add value to accumulator, together with the carry
-        // bit
-        let carry = self.status.contains(CpuFlags::CARRY) as u8;
-        let result = (data as u16) + (self.accumulator as u16) + (carry as u16);
-
-        // Set the carry flag if the result is larger than 255
-        // (0xff), since that is the largest value for an
-        // unsigned byte.
-        if result > 0xff {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag();
-        }
-
-        // Then set the overflow flag. Overflow occurs when the
-        // result of a signed operation does not fit into a
-        // signed byte, which inverts the sign bit and makes
-        // two positive inputs give a negative output or two
-        // negative inputs give a positive output. This may
-        // happen either if the two leftmost bits of the input
-        // are 0 and there is a carry of 1 from the previous
-        // bits, or if the two leftmost bits are 1 and there is
-        // a carry of 0. In other words, there is overflow when
-        // the two input bit 7 are the same and different from
-        // the ouput bit 7: if the sign of both inputs is
-        // different from the sign of the output, an overflow
-        // has occured.
-        let result = result as u8;
-        if (result ^ self.accumulator) & (result ^ data) & 0x80 != 0 {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag();
-        }
-
-        // Set the result in the accumulator and update the Z/N
-        // flags.
-        self.set_accumulator(result);
-    }
-
-    /// Load a byte of memory into the accumulator
+    /// Load accumulator with value
     pub fn lda(&mut self, mode: &AddressingMode) {
         // The address to load from is the operand of the
         // instruction, which is the next byte in memory
@@ -104,6 +56,39 @@ impl Cpu {
     pub fn sta(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         self.write_u8(addr, self.accumulator);
+    }
+
+    fn acc_add_with_carry(&mut self, data: u8) {
+        // Add value to accumulator, together with the carry
+        // bit
+        let carry = self.status.contains(CpuFlags::CARRY) as u8;
+        let result = (data as u16) + (self.accumulator as u16) + (carry as u16);
+
+        // Set the carry flag if the result is larger than 255
+        // (0xff), since that is the largest value for an
+        // unsigned byte.
+        self.status.set(CpuFlags::CARRY, result > 0xff);
+
+        // Then set the overflow flag. Overflow occurs when the
+        // result of a signed operation does not fit into a
+        // signed byte, which inverts the sign bit and makes
+        // two positive inputs give a negative output or two
+        // negative inputs give a positive output. This may
+        // happen either if the two leftmost bits of the input
+        // are 0 and there is a carry of 1 from the previous
+        // bits, or if the two leftmost bits are 1 and there is
+        // a carry of 0. In other words, there is overflow when
+        // the two input bit 7 are the same and different from
+        // the ouput bit 7: if the sign of both inputs is
+        // different from the sign of the output, an overflow
+        // has occured.
+        let result = result as u8;
+        let overflow = (result ^ self.accumulator) & (result ^ data) & 0x80 != 0;
+        self.status.set(CpuFlags::OVERFLOW, overflow);
+
+        // Set the result in the accumulator and update the Z/N
+        // flags.
+        self.set_accumulator(result);
     }
 
     /// Add value to accumulator with carry
@@ -161,11 +146,7 @@ impl Cpu {
         let mut value = self.read_u8(addr);
 
         // Set the carry flag if the leftmost bit is 1
-        if value >> 7 == 1 {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag();
-        }
+        self.status.set(CpuFlags::CARRY, value >> 7 == 1);
 
         // Shift the value left by one, and set the zero and
         // negative flags
@@ -174,23 +155,41 @@ impl Cpu {
         self.update_zn_flags(value);
     }
 
+    /// Shift accumulator by 1 bit to the left
+    pub fn asl_a(&mut self) {
+        // Set the carry flag if the leftmost bit is 1
+        self.status.set(CpuFlags::CARRY, self.accumulator >> 7 == 1);
+
+        // Shift the value left by one, and set the zero and
+        // negative flags
+        self.accumulator <<= 1;
+        self.update_zn_flags(self.accumulator);
+    }
+
     /// Shift value by 1 bit to the right
     pub fn lsr(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
         let mut value = self.read_u8(addr);
 
         // Set the carry flag if the rightmost bit is 1
-        if value & 1 == 1 {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag();
-        }
-
+        self.status.set(CpuFlags::CARRY, value & 1 == 1);
+        
         // Shift the value right by one, and set the zero and
         // negative flags
         value >>= 1;
         self.write_u8(addr, value);
         self.update_zn_flags(value);
+    }
+
+    /// Shift accumulator by 1 bit to the right
+    pub fn lsr_a(&mut self) {
+        // Set the carry flag if the rightmost bit is 1
+        self.status.set(CpuFlags::CARRY, self.accumulator & 1 == 1);
+
+        // Shift the value right by one, and set the zero and
+        // negative flags
+        self.accumulator >>= 1;
+        self.update_zn_flags(self.accumulator);
     }
 
     /// Rotate value by 1 bit to the left
@@ -200,11 +199,7 @@ impl Cpu {
 
         // Set the carry flag if the leftmost bit is 1
         let carry = self.status.contains(CpuFlags::CARRY) as u8;
-        if value >> 7 == 1 {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag();
-        }
+        self.status.set(CpuFlags::CARRY, value >> 7 == 1);
 
         // Shift the value left by one, and set bit 0 to the
         // carry bit
@@ -215,6 +210,20 @@ impl Cpu {
         self.update_zn_flags(value);
     }
 
+    /// Rotate accumulator by 1 bit to the left
+    pub fn rol_a(&mut self) {
+        // Set the carry flag if the leftmost bit is 1
+        let carry = self.status.contains(CpuFlags::CARRY) as u8;
+        self.status.set(CpuFlags::CARRY, self.accumulator >> 7 == 1);
+
+        // Shift the value left by one, and set bit 0 to the
+        // carry bit
+        self.accumulator <<= 1;
+        self.accumulator |= carry;
+
+        self.update_zn_flags(self.accumulator);
+    }
+
     /// Rotate value by 1 bit to the right
     pub fn ror(&mut self, mode: &AddressingMode) {
         let addr = self.get_op_address(mode);
@@ -222,11 +231,7 @@ impl Cpu {
 
         // Set the carry flag if the rightmost bit is 1
         let carry = self.status.contains(CpuFlags::CARRY) as u8;
-        if value & 1 == 1 {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag();
-        }
+        self.status.set(CpuFlags::CARRY, value & 1 == 1);
 
         // Shift the value right by one, and set bit 7 to the
         // carry bit
@@ -235,6 +240,20 @@ impl Cpu {
 
         self.write_u8(addr, value);
         self.update_zn_flags(value);
+    }
+
+    /// Rotate accumulator by 1 bit to the right
+    pub fn ror_a(&mut self) {
+        // Set the carry flag if the rightmost bit is 1
+        let carry = self.status.contains(CpuFlags::CARRY) as u8;
+        self.status.set(CpuFlags::CARRY, self.accumulator & 1 == 1);
+
+        // Shift the value right by one, and set bit 7 to the
+        // carry bit
+        self.accumulator >>= 1;
+        self.accumulator |= carry << 7;
+
+        self.update_zn_flags(self.accumulator);
     }
 
     /// Increment value by 1
@@ -275,12 +294,8 @@ impl Cpu {
 
     fn compare_with(&mut self, reg: u8, value: u8) {
         // Set carry if R >= M
-        if reg >= value {
-            self.set_carry_flag();
-        } else {
-            self.clear_carry_flag();
-        }
-
+        self.status.set(CpuFlags::CARRY, reg >= value);
+        
         // If R == M (that is, R - M == 0), set zero flag.
         self.update_zn_flags(reg.wrapping_sub(value));
     }
@@ -457,25 +472,25 @@ lazy_static! {
         Opcode::new(0x11, "ORA", 2, 5, AddressingMode::IndirectY),
 
         // Shifts and rotates
-        Opcode::new(0x0a, "ASL", 1, 2, AddressingMode::Implicit),
+        Opcode::new(0x0a, "ASL", 1, 2, AddressingMode::Accumulator),
         Opcode::new(0x06, "ASL", 2, 5, AddressingMode::ZeroPage),
         Opcode::new(0x16, "ASL", 2, 6, AddressingMode::ZeroPageX),
         Opcode::new(0x0e, "ASL", 3, 6, AddressingMode::Absolute),
         Opcode::new(0x1e, "ASL", 3, 7, AddressingMode::AbsoluteX),
 
-        Opcode::new(0x4a, "LSR", 1, 2, AddressingMode::Implicit),
+        Opcode::new(0x4a, "LSR", 1, 2, AddressingMode::Accumulator),
         Opcode::new(0x46, "LSR", 2, 5, AddressingMode::ZeroPage),
         Opcode::new(0x56, "LSR", 2, 6, AddressingMode::ZeroPageX),
         Opcode::new(0x4e, "LSR", 3, 6, AddressingMode::Absolute),
         Opcode::new(0x5e, "LSR", 3, 7, AddressingMode::AbsoluteX),
 
-        Opcode::new(0x2a, "ROL", 1, 2, AddressingMode::Implicit),
+        Opcode::new(0x2a, "ROL", 1, 2, AddressingMode::Accumulator),
         Opcode::new(0x26, "ROL", 2, 5, AddressingMode::ZeroPage),
         Opcode::new(0x36, "ROL", 2, 6, AddressingMode::ZeroPageX),
         Opcode::new(0x2e, "ROL", 3, 6, AddressingMode::Absolute),
         Opcode::new(0x3e, "ROL", 3, 7, AddressingMode::AbsoluteX),
 
-        Opcode::new(0x6a, "ROR", 1, 2, AddressingMode::Implicit),
+        Opcode::new(0x6a, "ROR", 1, 2, AddressingMode::Accumulator),
         Opcode::new(0x66, "ROR", 2, 5, AddressingMode::ZeroPage),
         Opcode::new(0x76, "ROR", 2, 6, AddressingMode::ZeroPageX),
         Opcode::new(0x6e, "ROR", 3, 6, AddressingMode::Absolute),
@@ -525,14 +540,14 @@ lazy_static! {
 
         Opcode::new(0x40, "RTI", 1, 6, AddressingMode::Implicit),
 
-        Opcode::new(0xd0, "BNE", 2, 2, AddressingMode::Implicit),
-        Opcode::new(0x70, "BVS", 2, 2, AddressingMode::Implicit),
-        Opcode::new(0x50, "BVC", 2, 2, AddressingMode::Implicit),
-        Opcode::new(0x30, "BMI", 2, 2, AddressingMode::Implicit),
-        Opcode::new(0xf0, "BEQ", 2, 2, AddressingMode::Implicit),
-        Opcode::new(0xb0, "BCS", 2, 2, AddressingMode::Implicit),
-        Opcode::new(0x90, "BCC", 2, 2, AddressingMode::Implicit),
-        Opcode::new(0x10, "BPL", 2, 2, AddressingMode::Implicit),
+        Opcode::new(0xd0, "BNE", 2, 2, AddressingMode::Relative),
+        Opcode::new(0x70, "BVS", 2, 2, AddressingMode::Relative),
+        Opcode::new(0x50, "BVC", 2, 2, AddressingMode::Relative),
+        Opcode::new(0x30, "BMI", 2, 2, AddressingMode::Relative),
+        Opcode::new(0xf0, "BEQ", 2, 2, AddressingMode::Relative),
+        Opcode::new(0xb0, "BCS", 2, 2, AddressingMode::Relative),
+        Opcode::new(0x90, "BCC", 2, 2, AddressingMode::Relative),
+        Opcode::new(0x10, "BPL", 2, 2, AddressingMode::Relative),
 
         // Bit tests
         Opcode::new(0x24, "BIT", 2, 3, AddressingMode::ZeroPage),

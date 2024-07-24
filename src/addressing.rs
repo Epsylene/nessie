@@ -16,6 +16,9 @@ use crate::cpu::Cpu;
 //    and then the value of the X/Y register is added at the
 //    address. The Y variant is only used for the LDX and STX
 //    commands, since they are already using the X register;
+//  - Relative: used by branch instructions, the argument is a
+//    signed 8-bit value that is added to the program counter
+//    if the branch is taken;
 //  - Absolute X/Y ($c000, X/Y): same as above, but the X/Y
 //    registers are added to an absolute address;
 //  - Immediate (#$c0): the address value is given directly to
@@ -24,6 +27,7 @@ use crate::cpu::Cpu;
 //    address 0xc0);
 //  - Implicit: instructions that deal with mandatory data or
 //    destinations--the argument is implied by the instruction;
+//  - Accumulator: the argument is the accumulator itself;
 //  - Indirect (($c000)): only used by JMP. The byte stored at
 //    the argument address and the byte after that are used to
 //    form the new address. For example, if 0x0120 contains the
@@ -37,15 +41,18 @@ use crate::cpu::Cpu;
 //  - Indirect Y (($c0), Y): also "indirect indexed". The
 //    argument is dereferenced first, and then the value of the
 //    Y register is added to the new address.
+#[derive(PartialEq)]
 pub enum AddressingMode {
     Absolute,
     ZeroPage,
     ZeroPageX,
     ZeroPageY,
+    Relative,
     AbsoluteX,
     AbsoluteY,
     Immediate,
     Implicit,
+    Accumulator,
     Indirect,
     IndirectX,
     IndirectY,
@@ -80,7 +87,9 @@ impl Cpu {
                 self.read_u16(ptr as u16).wrapping_add(self.register_y as u16)
             }
 
-            AddressingMode::Implicit => panic!("Invalid addressing mode"),
+            AddressingMode::Implicit | AddressingMode::Relative | AddressingMode::Accumulator => {
+                panic!("No address for implicit, relative or accumulator addressing modes");
+            }
         }
     }
 }
