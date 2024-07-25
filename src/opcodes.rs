@@ -319,10 +319,33 @@ impl Cpu {
         self.compare_with(self.register_y, value);
     }
 
-    /// Jump to address
-    pub fn jmp(&mut self, mode: &AddressingMode) {
-        let addr = self.get_op_address(mode);
+    /// Jump to address (absolute)
+    pub fn jmp_abs(&mut self) {
+        let addr = self.read_u16(self.program_counter);
         self.program_counter = addr;
+    }
+
+    /// Jump to address (indirect)
+    pub fn jmp_ind(&mut self) {
+        let addr = self.read_u16(self.program_counter);
+        
+        // The NMOS 6502 indirect jump has a bug whereas if the
+        // low byte of the address is at the end of a page, the
+        // high byte is not taken from the next byte in memory,
+        // but from the first byte of the same page. That is,
+        // for a JMP ($30FF), the low byte is $30FF and the
+        // high byte is $3000, not $3100. This is fixed in the
+        // later CMOS version, the 65C02, but we need to
+        // replicate it here.
+        if addr & 0x00FF == 0x00FF {
+            let lo = self.read_u8(addr);
+            let hi = self.read_u8(addr & 0xFF00);
+
+            self.program_counter = (hi as u16) << 8 | (lo as u16);
+        } else {
+            self.program_counter = self.read_u16(addr)
+        };
+
     }
 
     /// Jump to subroutine
@@ -334,7 +357,7 @@ impl Cpu {
         self.push_u16(return_addr);
 
         // Then jump to the subroutine.
-        self.jmp(&AddressingMode::Absolute);
+        self.jmp_abs();
     }
 
     /// Return from subroutine

@@ -335,7 +335,8 @@ impl Cpu {
                 // CPY (Compare Y Register)
                 0xc0 | 0xc4 | 0xcc => self.cpy(mode),
                 // JMP (Jump)
-                0x4c | 0x6c => self.jmp(mode),
+                0x4c => self.jmp_abs(),
+                0x6c => self.jmp_ind(),
                 // JSR (Jump to Subroutine)
                 0x20 => self.jsr(),
                 // RTS (Return from Subroutine)
