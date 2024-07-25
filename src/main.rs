@@ -69,7 +69,7 @@ fn main() {
     let video = sdl.video().unwrap();
     let scale = 10.0;
     let window = video
-        .window("NES Emulator", 32*scale as u32, 32*scale as u32)
+        .window("Snake", 32*scale as u32, 32*scale as u32)
         .position_centered()
         .build()
         .unwrap();
