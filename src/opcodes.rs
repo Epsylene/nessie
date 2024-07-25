@@ -34,6 +34,19 @@ impl Cpu {
         self.update_zn_flags(self.accumulator);
     }
 
+    /// Update the zero and negative flags of the status
+    /// register depending on the contents of the given
+    /// register
+    fn update_zn_flags(&mut self, register: u8) {
+        // If the register is 0, set the zero flag, otherwise
+        // clear it
+        self.status.set(CpuFlags::ZERO, register == 0);
+
+        // Set the negative flag if the negative bit of the
+        // register is set
+        self.status.set(CpuFlags::NEGATIVE, register & 0b1000_0000 != 0);
+    }
+
     fn acc_add_with_carry(&mut self, data: u8) {
         // Add value to accumulator, together with the carry
         // bit
@@ -245,6 +258,12 @@ impl Cpu {
     pub fn inx(&mut self) {
         self.register_x = self.register_x.wrapping_add(1);
         self.update_zn_flags(self.register_x);
+    }
+
+    /// Increment Y register by 1
+    pub fn iny(&mut self) {
+        self.register_y = self.register_y.wrapping_add(1);
+        self.update_zn_flags(self.register_y);
     }
 
     /// Decrement value by 1
@@ -539,18 +558,17 @@ impl Cpu {
 
     /// Push the contents of the status register onto the stack
     pub fn php(&mut self) {
-        self.push_u8(self.status.bits());
+        let mut flags = self.status.clone();
+        flags.insert(CpuFlags::BREAK);
+        flags.insert(CpuFlags::UNUSED);
+
+        self.push_u8(flags.bits());
     }
 
     /// Pull the contents of the stack into the status register
     pub fn plp(&mut self) {
         self.status = CpuFlags::from_bits_truncate(self.pop_u8());
         self.status.insert(CpuFlags::UNUSED);
-    }
-
-    /// No operation
-    pub fn nop(&mut self) {
-        // Do nothing
     }
 }
 

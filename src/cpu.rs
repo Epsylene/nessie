@@ -51,6 +51,7 @@ pub struct Cpu {
 }
 
 bitflags! {
+    #[derive(Clone)]
     pub struct CpuFlags: u8 {
         // - Carry Flag (C): set if the last operation caused
         //  an overflow
@@ -245,6 +246,10 @@ impl Cpu {
     }
 
     pub fn run(&mut self) {
+        self.run_with_callback(|_| {});
+    }
+
+    pub fn run_with_callback(&mut self, mut callback: impl FnMut(&mut Cpu)) {
         // The program is a succession of bytes, each either
         // referecing an opcode (instruction) or a parameter
         // for the previous command. For example, the program
@@ -311,6 +316,8 @@ impl Cpu {
                 }
                 // INX (Increment X Register)
                 0xe8 => self.inx(),
+                // INY (Increment Y Register)
+                0xc8 => self.iny(),
                 // DEC (Decrement Memory)
                 0xc6 | 0xd6 | 0xce | 0xde => {
                     self.dec(mode)
@@ -333,6 +340,8 @@ impl Cpu {
                 0x20 => self.jsr(),
                 // RTS (Return from Subroutine)
                 0x60 => self.rts(),
+                // RTI (Return from Interrupt)
+                0x40 => self.rti(),
                 // BCC (Branch if Carry Clear)
                 0x90 => self.bcc(),
                 // BCS (Branch if Carry Set)
@@ -406,31 +415,21 @@ impl Cpu {
                 // PLP (Pull Processor Status)
                 0x28 => self.plp(),
                 // NOP (No Operation)
-                _ => self.nop(),
+                0xea => (),
+                // Illegal opcodes
+                _ => panic!("Illegal opcode"),
             }
 
-            // Then we move to the next instruction, which
-            // follows the last byte of the opcode in memory.
-            // If the program counter has not been modified by
-            // the instruction (like a jump or a branch), we
-            // increment it by the number of bytes of the
-            // opcode.
             if self.program_counter == state {
                 self.program_counter += (opcode.bytes - 1) as u16;
             }
+
+            // A callback is executed after each instruction to
+            // allow for a caller to intercept the execution
+            // and read input, write output, or perform other
+            // operations.
+            callback(self);
         }
-    }
-
-    /// Update the zero and negative flags of the status
-    /// register depending on the contents of the given register
-    pub fn update_zn_flags(&mut self, register: u8) {
-        // If the register is 0, set the zero flag, otherwise
-        // clear it
-        self.status.set(CpuFlags::ZERO, register == 0);
-
-        // Set the negative flag if the negative bit of the
-        // register is set
-        self.status.set(CpuFlags::NEGATIVE, register & 0b1000_0000 != 0);
     }
 }
 
